@@ -597,3 +597,149 @@ def _calculate_consistency(data: List[float]) -> float:
 
     consistency = max(0, 100 - (std_dev * 10))
     return consistency
+
+
+# ============================================
+# NEW ML ANALYTICS ENDPOINTS
+# ============================================
+
+from app.models.analytics import PlayerMatchStat, PlayerPrediction
+from app.schemas.ml_analytics import (
+    PlayerMLSummary,
+    PredictionsListResponse,
+    TrainModelsResponse,
+    IngestionResponse,
+)
+from app.services.ml_analytics_service import train_all as train_ml_models, predict_for_player as ml_predict_player
+
+
+@router.get(
+    "/ml/player/{player_id}/summary",
+    response_model=PlayerMLSummary,
+    summary="Get ML-based player summary",
+    description="Retrieve player summary with advanced ML metrics from recent matches"
+)
+async def get_player_ml_summary(
+    player_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Get player ML summary based on recent match stats."""
+    # Fetch last 10 match stats
+    stats_stmt = (
+        select(PlayerMatchStat)
+        .where(PlayerMatchStat.player_id == player_id)
+        .order_by(PlayerMatchStat.id.desc())
+        .limit(10)
+    )
+    stats_result = await session.execute(stats_stmt)
+    stats = stats_result.scalars().all()
+
+    if not stats:
+        return PlayerMLSummary(
+            player_id=player_id,
+            last_10_matches=0,
+            avg_xg=0.0,
+            avg_key_passes=0.0,
+            avg_duels_won=0.0,
+            trend_form_last_10=0.0,
+        )
+
+    avg_xg = sum(s.xg or 0 for s in stats) / len(stats)
+    avg_kp = sum(s.key_passes or 0 for s in stats) / len(stats)
+    avg_duels = sum(s.duels_won or 0 for s in stats) / len(stats)
+
+    # Trend form (difference between last 5 and first 5)
+    first5 = stats[5:] if len(stats) > 5 else []
+    last5 = stats[:5]
+    m1 = (sum(s.xg or 0 for s in first5) / len(first5)) if first5 else 0
+    m2 = (sum(s.xg or 0 for s in last5) / len(last5)) if last5 else 0
+    trend = m2 - m1
+
+    return PlayerMLSummary(
+        player_id=player_id,
+        last_10_matches=len(stats),
+        avg_xg=round(avg_xg, 3),
+        avg_key_passes=round(avg_kp, 1),
+        avg_duels_won=round(avg_duels, 1),
+        trend_form_last_10=round(trend, 3),
+    )
+
+
+@router.get(
+    "/ml/player/{player_id}/predictions",
+    response_model=PredictionsListResponse,
+    summary="Get ML predictions for player",
+    description="Generate and retrieve ML predictions (injury risk, performance) for a player"
+)
+async def get_player_ml_predictions(
+    player_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Get ML predictions for a player."""
+    # Get player to retrieve organization_id
+    player_stmt = select(Player).where(Player.id == player_id)
+    player_result = await session.execute(player_stmt)
+    player = player_result.scalar_one_or_none()
+
+    if not player:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Player {player_id} not found"
+        )
+
+    # Generate new predictions
+    _ = await ml_predict_player(player_id, player.organization_id)
+
+    # Fetch recent predictions
+    preds_stmt = (
+        select(PlayerPrediction)
+        .where(PlayerPrediction.player_id == player_id)
+        .order_by(PlayerPrediction.date.desc(), PlayerPrediction.id.desc())
+        .limit(10)
+    )
+    preds_result = await session.execute(preds_stmt)
+    preds = preds_result.scalars().all()
+
+    from app.schemas.ml_analytics import PlayerPredictionOut
+
+    return PredictionsListResponse(
+        player_id=player_id,
+        items=[
+            PlayerPredictionOut(
+                player_id=p.player_id,
+                date=p.date,
+                target=p.target,
+                model_name=p.model_name,
+                model_version=p.model_version,
+                y_pred=p.y_pred,
+                y_proba=p.y_proba,
+            )
+            for p in preds
+        ],
+    )
+
+
+@router.post(
+    "/ml/retrain",
+    response_model=TrainModelsResponse,
+    summary="Retrain ML models",
+    description="Retrain injury risk and performance prediction models"
+)
+async def retrain_ml_models():
+    """Retrain all ML models."""
+    result = await train_ml_models()
+    return TrainModelsResponse(status="ok", result=result)
+
+
+@router.post(
+    "/ml/ingest",
+    response_model=IngestionResponse,
+    summary="Ingest training data",
+    description="Endpoint placeholder for future CSV/JSON data ingestion"
+)
+async def ingest_training_data():
+    """Ingest training data (placeholder for future implementation)."""
+    return IngestionResponse(
+        status="ok",
+        message="Ingestion endpoint ready for future CSV/JSON payloads."
+    )

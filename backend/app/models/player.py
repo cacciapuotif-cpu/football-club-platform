@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.models.team import Team
     from app.models.player_stats import PlayerStats
     from app.models.player_training_stats import PlayerTrainingStats
+    from app.models.analytics import PlayerMatchStat, PlayerTrainingLoad, PlayerFeatureDaily, PlayerPrediction
 
 
 class PlayerRole(str, Enum):
@@ -133,6 +134,12 @@ class Player(SQLModel, table=True):
     # Relationships
     player_stats: list["PlayerStats"] = Relationship(back_populates="player")
     training_stats: list["PlayerTrainingStats"] = Relationship(back_populates="player")
+
+    # ML Analytics relationships
+    ml_match_stats: list["PlayerMatchStat"] = Relationship(back_populates="player")
+    ml_training_loads: list["PlayerTrainingLoad"] = Relationship(back_populates="player")
+    ml_features_daily: list["PlayerFeatureDaily"] = Relationship(back_populates="player")
+    ml_predictions: list["PlayerPrediction"] = Relationship(back_populates="player")
 
     # Timestamps
     created_at: datetime = Field(

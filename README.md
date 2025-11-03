@@ -522,6 +522,156 @@ make ml-health
 
 ---
 
+## 🤖 Analytics & ML Setup
+
+### Overview
+
+Il sistema include una pipeline completa di **ML Analytics** per analisi avanzate dei giocatori con:
+- **2 modelli sklearn**: LogisticRegression (injury risk) + LinearRegression (performance)
+- **6 nuove tabelle**: matches, training_sessions, player_match_stats, player_training_load, player_features_daily, player_predictions
+- **4 nuovi endpoint** REST API per summary, predictions, retrain, ingest
+- **3 componenti React**: PlayerRadar, PlayerTrend, SquadTable (con recharts)
+
+### Setup Rapido
+
+```bash
+# 1. Esegui migrazione Alembic (crea le 6 tabelle analytics)
+cd backend
+alembic upgrade head
+
+# 2. Popola dati sintetici + train modelli + genera predictions
+python scripts/seed_ml_analytics.py
+```
+
+**Output atteso:**
+```
+Found 24 players...
+Created 17 matches
+Created 68 training sessions
+Created 408 player match stats
+Created 1632 training load records
+Created 2928 daily feature records
+Training result: {'injury_auc': 0.82, 'perf_r2': 0.65, 'model_version': '1.0.0'}
+Generated 48 predictions
+```
+
+### Endpoint API
+
+#### 1. Player ML Summary
+```bash
+GET /api/v1/advanced-analytics/ml/player/{player_id}/summary
+```
+Response:
+```json
+{
+  "player_id": "uuid",
+  "last_10_matches": 10,
+  "avg_xg": 0.35,
+  "avg_key_passes": 2.4,
+  "avg_duels_won": 5.2,
+  "trend_form_last_10": 0.08
+}
+```
+
+#### 2. Player Predictions
+```bash
+GET /api/v1/advanced-analytics/ml/player/{player_id}/predictions
+```
+Genera e ritorna predizioni **injury_risk** (proba) e **performance_index** (valore stimato).
+
+#### 3. Retrain Models
+```bash
+POST /api/v1/advanced-analytics/ml/retrain
+```
+Riaddestra i 2 modelli sklearn su dati correnti. Ritorna metriche AUC e R².
+
+#### 4. Ingest Data
+```bash
+POST /api/v1/advanced-analytics/ml/ingest
+```
+Placeholder per future ingestion CSV/JSON (match stats, training load).
+
+### Componenti React
+
+I componenti sono in `frontend/components/analytics/`:
+
+#### PlayerRadar
+Radar chart con 4 metriche: xG, Key Passes, Duels Won, Form Trend.
+```tsx
+import PlayerRadar from "@/components/analytics/PlayerRadar";
+
+<PlayerRadar playerId="uuid" apiUrl="http://localhost:8000" />
+```
+
+#### PlayerTrend
+Line chart con trend xG e Key Passes ultimi 10 match.
+```tsx
+import PlayerTrend from "@/components/analytics/PlayerTrend";
+
+<PlayerTrend playerId="uuid" />
+```
+
+#### SquadTable
+Tabella comparativa squadra (primi 20 giocatori per performance).
+```tsx
+import SquadTable from "@/components/analytics/SquadTable";
+
+<SquadTable />
+```
+
+**Nota**: Installa `recharts` se mancante:
+```bash
+cd frontend
+npm install recharts
+```
+
+### Modelli ML
+
+I modelli sklearn vengono salvati in `backend/ml/models/`:
+- `injury_risk_logreg.joblib`: LogisticRegression per rischio infortunio
+- `performance_linreg.joblib`: LinearRegression per performance index
+
+**Features injury model**:
+- `load_acute`, `load_chronic`, `monotony`, `strain`
+
+**Features performance model**:
+- `rolling_7d_load`, `rolling_21d_load`
+
+### Tabelle Database
+
+| Tabella | Descrizione |
+|---------|-------------|
+| `matches` | Partite con date, avversari, competizione |
+| `training_sessions` | Sedute di allenamento con tipo, durata, RPE |
+| `player_match_stats` | Stats giocatore per match (xG, key passes, duels, sprints, etc.) |
+| `player_training_load` | Carichi allenamento (acute, chronic, ACWR, monotony, strain) |
+| `player_features_daily` | Features giornaliere per ML (rolling loads, form score) |
+| `player_predictions` | Predizioni salvate (injury_risk, performance_index) |
+
+### Test Manuale
+
+```bash
+# 1. Avvia backend (porta 8000 libera)
+cd backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 2. Test endpoint
+curl http://localhost:8000/api/v1/advanced-analytics/ml/player/{player_id}/summary
+curl http://localhost:8000/api/v1/advanced-analytics/ml/player/{player_id}/predictions
+curl -X POST http://localhost:8000/api/v1/advanced-analytics/ml/retrain
+
+# 3. Frontend: importa componenti in una pagina player detail
+```
+
+### Note Importanti
+
+- **NON usare porte 3000/3001**: Il backend di default è su 8000. Per test su altra porta: `PORT=8012 uvicorn app.main:app`
+- **UUID vs Integer**: Il progetto usa UUID per player_id, non integer come negli esempi generici
+- **Async/SQLModel**: Tutti i servizi ML usano async SQLAlchemy + SQLModel
+- **Multi-tenancy**: Tutte le tabelle includono `organization_id` per isolamento tenant
+
+---
+
 ## 🧪 Testing
 
 ```bash
