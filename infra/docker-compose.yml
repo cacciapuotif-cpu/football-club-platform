@@ -1,0 +1,367 @@
+version: '3.9'
+
+services:
+  # ============================================
+  # DATABASE - PostgreSQL 15
+  # ============================================
+  db:
+    image: postgres:15-alpine
+    container_name: football_club_platform-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-football_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app_password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-football_dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - football_club_platform-network
+    restart: unless-stopped
+
+  # ============================================
+  # REDIS - Cache & Queue
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: football_club_platform-redis
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - football_club_platform-network
+    restart: unless-stopped
+
+  # ============================================
+  # BACKEND - FastAPI
+  # ============================================
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: football_club_platform-backend
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app_password}@db:5432/${POSTGRES_DB:-football_dev}
+      REDIS_URL: redis://redis:6379/0
+      SKIP_AUTH: "true"
+    volumes:
+      - ../backend:/app
+      - ../ml:/app/ml
+      - storage-data:/data/storage
+      - ../scripts:/app/scripts
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - football_club_platform-network
+    profiles:
+      - dev
+      - prod
+    restart: unless-stopped
+    command: >
+      sh -c "
+      echo '⏳ Waiting for database...' &&
+      sleep 5 &&
+      echo '✅ Database ready' &&
+      gunicorn app.main:app --workers ${WORKERS:-4} --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 120 --access-logfile - --error-logfile -
+      "
+
+  # ============================================
+  # MLFLOW - ML Model Tracking & Registry
+  # ============================================
+  mlflow:
+    image: mlflow/mlflow:2.10.2
+    container_name: football_club_platform-mlflow
+    environment:
+      MLFLOW_BACKEND_STORE_URI: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app_password}@db:5432/${POSTGRES_DB:-football_dev}
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
+      MLFLOW_HOST: 0.0.0.0
+      MLFLOW_PORT: 5000
+    volumes:
+      - mlflow-artifacts:/mlflow/artifacts
+      - mlflow-data:/mlflow
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - football_club_platform-network
+    profiles:
+      - dev
+      - prod
+      - ml
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app_password}@db:5432/${POSTGRES_DB:-football_dev}
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+
+  # ============================================
+  # WORKER - RQ Background Jobs
+  # ============================================
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: football_club_platform-worker
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app_password}@db:5432/${POSTGRES_DB:-football_dev}
+      REDIS_URL: redis://redis:6379/0
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ../backend:/app
+      - ../ml:/app/ml
+      - storage-data:/data/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    networks:
+      - football_club_platform-network
+    profiles:
+      - dev
+      - prod
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'rq worker' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    command: >
+      sh -c "
+      echo '⏳ Waiting for services...' &&
+      sleep 10 &&
+      echo '🔄 Starting RQ worker...' &&
+      rq worker --url redis://redis:6379/0 default high low
+      "
+
+  # ============================================
+  # FRONTEND - Next.js
+  # ============================================
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: football_club_platform-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Football Club Platform}
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3010:3000"
+    depends_on:
+      - backend
+    networks:
+      - football_club_platform-network
+    profiles:
+      - dev
+    restart: unless-stopped
+    command: npm run dev
+
+  # ============================================
+  # MINIO - S3-compatible storage (Optional)
+  # ============================================
+  minio:
+    image: minio/minio:latest
+    container_name: football_club_platform-minio
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - football_club_platform-network
+    profiles:
+      - s3
+    restart: unless-stopped
+
+  # ============================================
+  # OTEL COLLECTOR - Telemetry Pipeline
+  # ============================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.100.0
+    container_name: football_club_platform-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "8888:8888"   # Collector internal telemetry
+      - "8889:8889"   # Prometheus exporter for app metrics
+    networks:
+      - football_club_platform-network
+    profiles:
+      - dev
+      - prod
+      - observability
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # TEMPO - Distributed Tracing Backend
+  # ============================================
+  tempo:
+    image: grafana/tempo:2.4.1
+    container_name: football_club_platform-tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+      - tempo-data:/tmp/tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP
+      - "4317"        # OTLP gRPC (internal)
+    networks:
+      - football_club_platform-network
+    profiles:
+      - dev
+      - prod
+      - observability
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3200/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # PROMETHEUS - Metrics Storage & Querying
+  # ============================================
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: football_club_platform-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - football_club_platform-network
+    profiles:
+      - dev
+      - prod
+      - observability
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - otel-collector
+
+  # ============================================
+  # GRAFANA - Observability Dashboards
+  # ============================================
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: football_club_platform-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3002
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3002:3000"
+    networks:
+      - football_club_platform-network
+    profiles:
+      - dev
+      - prod
+      - observability
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - prometheus
+      - tempo
+
+# ============================================
+# VOLUMES
+# ============================================
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  storage-data:
+    driver: local
+  minio-data:
+    driver: local
+  mlflow-artifacts:
+    driver: local
+  mlflow-data:
+    driver: local
+  tempo-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+# ============================================
+# NETWORKS
+# ============================================
+networks:
+  football_club_platform-network:
+    driver: bridge

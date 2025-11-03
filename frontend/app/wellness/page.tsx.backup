@@ -1,0 +1,302 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import WellnessTable from '@/components/wellness/WellnessTable'
+import WellnessPlayerDrawer from '@/components/wellness/WellnessPlayerDrawer'
+import { getWellnessSummary, getPlayerWellnessEntries } from '@/lib/api/wellness'
+import { BUILD_TAG, API_URL } from '@/lib/version'
+import type { WellnessSummary, WellnessEntry, WellnessSummaryParams } from '@/types/wellness'
+
+type PeriodFilter = '7' | '14' | '30' | '90' | 'all'
+
+export default function WellnessPage() {
+  const router = useRouter()
+  const [summaryData, setSummaryData] = useState<WellnessSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Filters
+  const [period, setPeriod] = useState<PeriodFilter>('30')
+  const [role, setRole] = useState<string>('')
+  const [search, setSearch] = useState<string>('')
+  const [sort, setSort] = useState<string>('cognome_asc')
+  const [page, setPage] = useState<number>(1)
+
+  // Drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [selectedPlayer, setSelectedPlayer] = useState<WellnessSummary | null>(null)
+  const [playerEntries, setPlayerEntries] = useState<WellnessEntry[]>([])
+  const [entriesLoading, setEntriesLoading] = useState(false)
+
+  // DIAGNOSTICS: Log on mount
+  useEffect(() => {
+    console.info('[WELLNESS_V2] Page mounted', {
+      build: BUILD_TAG,
+      api: API_URL,
+      pathname: typeof window !== 'undefined' ? window.location.pathname : 'SSR',
+    })
+  }, [])
+
+  useEffect(() => {
+    // Skip authentication in development mode
+    if (process.env.NEXT_PUBLIC_SKIP_AUTH !== 'true') {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        router.push('/login')
+        return
+      }
+    }
+    fetchSummaryData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period, role, search, sort, page])
+
+  const fetchSummaryData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Build query parameters
+      const params: WellnessSummaryParams = {
+        page,
+        page_size: 25,
+        sort: sort as any,
+      }
+
+      // Add date filters based on period
+      if (period !== 'all') {
+        const today = new Date()
+        const fromDate = new Date()
+        fromDate.setDate(today.getDate() - parseInt(period))
+        params.from = fromDate.toISOString().split('T')[0]
+        params.to = today.toISOString().split('T')[0]
+      }
+
+      if (role) params.role = role as any
+      if (search) params.search = search
+
+      // Use centralized API client
+      const data = await getWellnessSummary(params)
+      setSummaryData(data)
+    } catch (err) {
+      console.error('Error fetching wellness summary:', err)
+      setError(err instanceof Error ? err.message : 'Errore nel caricamento dei dati wellness')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRowClick = async (playerId: string) => {
+    const player = summaryData.find((p) => p.player_id === playerId)
+    if (!player) return
+
+    setSelectedPlayer(player)
+    setDrawerOpen(true)
+    setEntriesLoading(true)
+
+    try {
+      // Fetch player wellness entries
+      const params: any = {
+        page: 1,
+        page_size: 50,
+      }
+
+      // Use same date filters as summary
+      if (period !== 'all') {
+        const today = new Date()
+        const fromDate = new Date()
+        fromDate.setDate(today.getDate() - parseInt(period))
+        params.from = fromDate.toISOString().split('T')[0]
+        params.to = today.toISOString().split('T')[0]
+      }
+
+      // Use centralized API client
+      const data = await getPlayerWellnessEntries(playerId, params)
+      setPlayerEntries(data)
+    } catch (err) {
+      console.error('Error fetching player entries:', err)
+      setPlayerEntries([])
+    } finally {
+      setEntriesLoading(false)
+    }
+  }
+
+  const handleCloseDrawer = () => {
+    setDrawerOpen(false)
+    setSelectedPlayer(null)
+    setPlayerEntries([])
+  }
+
+  const handleSortChange = (newSort: string) => {
+    setSort(newSort)
+    setPage(1) // Reset to first page on sort change
+  }
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setPage(1) // Reset to first page on search
+    fetchSummaryData()
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      {/* DIAGNOSTICS: Version Banner */}
+      <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg mb-4 shadow-sm">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-semibold">
+            ✓ Wellness V2 • Build: {BUILD_TAG}
+          </span>
+          <span className="opacity-90">
+            API: {API_URL}
+          </span>
+        </div>
+      </div>
+
+      {/* DIAGNOSTICS: DOM Flag for testing */}
+      <div data-test-id="wellness-v2-flag" className="text-xs opacity-70 text-gray-500 mb-2">
+        WELLNESS_V2_ACTIVE
+      </div>
+
+      {/* DIAGNOSTICS: Warning if API URL not configured */}
+      {!process.env.NEXT_PUBLIC_API_URL && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-3 mb-4 rounded">
+          <p className="font-semibold">⚠️ ATTENZIONE</p>
+          <p className="text-sm">NEXT_PUBLIC_API_URL non impostato, uso http://localhost:8000</p>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-800">Wellness — Riepilogo Giocatori</h1>
+        <Link
+          href="/wellness/new"
+          className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+        >
+          + Nuovo Monitoraggio
+        </Link>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Period Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Periodo
+            </label>
+            <select
+              value={period}
+              onChange={(e) => {
+                setPeriod(e.target.value as PeriodFilter)
+                setPage(1)
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="7">Ultimi 7 giorni</option>
+              <option value="14">Ultimi 14 giorni</option>
+              <option value="30">Ultimi 30 giorni</option>
+              <option value="90">Ultimi 90 giorni</option>
+              <option value="all">Tutto il periodo</option>
+            </select>
+          </div>
+
+          {/* Role Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Ruolo
+            </label>
+            <select
+              value={role}
+              onChange={(e) => {
+                setRole(e.target.value)
+                setPage(1)
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Tutti i ruoli</option>
+              <option value="GK">Portiere (GK)</option>
+              <option value="DF">Difensore (DF)</option>
+              <option value="MF">Centrocampista (MF)</option>
+              <option value="FW">Attaccante (FW)</option>
+            </select>
+          </div>
+
+          {/* Search */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Cerca giocatore
+            </label>
+            <form onSubmit={handleSearchSubmit} className="flex space-x-2">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cognome o nome..."
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                🔍
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+          {error}
+        </div>
+      )}
+
+      {/* Wellness Table */}
+      <WellnessTable
+        data={summaryData}
+        loading={loading}
+        onRowClick={handleRowClick}
+        onSort={handleSortChange}
+        currentSort={sort}
+      />
+
+      {/* Pagination */}
+      {summaryData.length > 0 && (
+        <div className="mt-6 flex justify-center space-x-2">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            ← Precedente
+          </button>
+          <span className="px-4 py-2 bg-gray-100 rounded-md font-medium">
+            Pagina {page}
+          </span>
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            disabled={summaryData.length < 25}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Successiva →
+          </button>
+        </div>
+      )}
+
+      {/* Player Wellness Drawer */}
+      {selectedPlayer && (
+        <WellnessPlayerDrawer
+          isOpen={drawerOpen}
+          onClose={handleCloseDrawer}
+          playerName={selectedPlayer.nome}
+          playerSurname={selectedPlayer.cognome}
+          playerId={selectedPlayer.player_id}
+          entries={playerEntries}
+          loading={entriesLoading}
+        />
+      )}
+    </div>
+  )
+}

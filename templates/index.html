@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Football Club Platform - Gestione Calciatori</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚽ Football Club Platform</h1>
+            <p>Sistema di gestione performance calciatori giovanili</p>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="home">Home</button>
+            <button class="tab-btn" data-tab="players">Giocatori</button>
+            <button class="tab-btn" data-tab="new-session">Nuova Sessione</button>
+            <button class="tab-btn" data-tab="analytics">Analytics</button>
+        </nav>
+
+        <!-- HOME TAB -->
+        <div id="home-tab" class="tab-content active">
+            <h2>Benvenuto</h2>
+            <div class="cards">
+                <div class="card">
+                    <h3>Gestione Giocatori</h3>
+                    <p>Visualizza e gestisci l'anagrafica dei giocatori</p>
+                    <button onclick="switchTab('players')">Vai ai Giocatori</button>
+                </div>
+                <div class="card">
+                    <h3>Nuova Sessione</h3>
+                    <p>Inserisci dati di allenamento, partita o test</p>
+                    <button onclick="switchTab('new-session')">Inserisci Dati</button>
+                </div>
+                <div class="card">
+                    <h3>Analytics</h3>
+                    <p>Visualizza statistiche e trend di performance</p>
+                    <button onclick="switchTab('analytics')">Vedi Analytics</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- PLAYERS TAB -->
+        <div id="players-tab" class="tab-content">
+            <h2>Giocatori</h2>
+            <div class="controls">
+                <button onclick="showNewPlayerForm()">+ Nuovo Giocatore</button>
+                <input type="text" id="player-search" placeholder="Cerca per nome o codice..." />
+                <select id="role-filter">
+                    <option value="">Tutti i ruoli</option>
+                    <option value="GK">Portiere</option>
+                    <option value="DF">Difensore</option>
+                    <option value="MF">Centrocampista</option>
+                    <option value="FW">Attaccante</option>
+                </select>
+            </div>
+            <div id="players-list" class="list-container">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- NEW SESSION TAB -->
+        <div id="new-session-tab" class="tab-content">
+            <h2>Nuova Sessione - Form a Step</h2>
+
+            <div class="wizard-progress">
+                <div class="wizard-step active" data-step="1">1. Giocatore</div>
+                <div class="wizard-step" data-step="2">2. Sessione</div>
+                <div class="wizard-step" data-step="3">3. Fisico</div>
+                <div class="wizard-step" data-step="4">4. Tecnico</div>
+                <div class="wizard-step" data-step="5">5. Tattico</div>
+                <div class="wizard-step" data-step="6">6. Psicologico</div>
+                <div class="wizard-step" data-step="7">7. Riepilogo</div>
+            </div>
+
+            <form id="session-form">
+                <!-- Step 1: Select Player -->
+                <div class="wizard-content" data-step="1">
+                    <h3>Seleziona Giocatore</h3>
+                    <select id="session-player-code" required>
+                        <option value="">-- Seleziona giocatore --</option>
+                    </select>
+                    <button type="button" onclick="duplicateLastSession()">Duplica ultima sessione</button>
+                </div>
+
+                <!-- Step 2: Session Info -->
+                <div class="wizard-content" data-step="2" style="display:none;">
+                    <h3>Informazioni Sessione</h3>
+                    <label>Data: <input type="date" name="session_date" required /></label>
+                    <label>Tipo:
+                        <select name="session_type" required>
+                            <option value="TRAINING">Allenamento</option>
+                            <option value="MATCH">Partita</option>
+                            <option value="TEST">Test</option>
+                        </select>
+                    </label>
+                    <label>Minuti Giocati: <input type="number" name="minutes_played" value="0" min="0" max="180" /></label>
+                    <label>Valutazione Allenatore (0-10): <input type="number" step="0.1" name="coach_rating" min="0" max="10" /></label>
+                    <label>Note: <textarea name="notes"></textarea></label>
+                </div>
+
+                <!-- Step 3: Physical Metrics -->
+                <div class="wizard-content" data-step="3" style="display:none;">
+                    <h3>Metriche Fisiche</h3>
+                    <div class="form-grid">
+                        <label>Altezza (cm): <input type="number" step="0.1" name="height_cm" /></label>
+                        <label>Peso (kg): <input type="number" step="0.1" name="weight_kg" /></label>
+                        <label>Frequenza cardiaca a riposo: <input type="number" name="resting_hr_bpm" value="60" required /></label>
+                        <label>Distanza (km): <input type="number" step="0.1" name="distance_km" value="0" required /></label>
+                        <label>Sprint >25km/h: <input type="number" name="sprints_over_25kmh" value="0" /></label>
+                        <label>Livello Yo-Yo: <input type="number" step="0.1" name="yoyo_level" /></label>
+                        <label>RPE (1-10): <input type="number" step="0.1" name="rpe" value="5" min="1" max="10" required /></label>
+                        <label>Ore di sonno: <input type="number" step="0.1" name="sleep_hours" /></label>
+                    </div>
+                </div>
+
+                <!-- Step 4: Technical Metrics -->
+                <div class="wizard-content" data-step="4" style="display:none;">
+                    <h3>Metriche Tecniche</h3>
+                    <div class="form-grid">
+                        <label>Passaggi tentati: <input type="number" name="passes_attempted" value="0" /></label>
+                        <label>Passaggi completati: <input type="number" name="passes_completed" value="0" /></label>
+                        <label>Passaggi progressivi: <input type="number" name="progressive_passes" value="0" /></label>
+                        <label>Tiri: <input type="number" name="shots" value="0" /></label>
+                        <label>Tiri in porta: <input type="number" name="shots_on_target" value="0" /></label>
+                        <label>Dribbling riusciti: <input type="number" name="successful_dribbles" value="0" /></label>
+                        <label>Dribbling falliti: <input type="number" name="failed_dribbles" value="0" /></label>
+                        <label>Palloni persi: <input type="number" name="ball_losses" value="0" /></label>
+                        <label>Palloni recuperati: <input type="number" name="ball_recoveries" value="0" /></label>
+                    </div>
+                </div>
+
+                <!-- Step 5: Tactical Metrics -->
+                <div class="wizard-content" data-step="5" style="display:none;">
+                    <h3>Metriche Tattiche</h3>
+                    <div class="form-grid">
+                        <label>xG: <input type="number" step="0.01" name="xg" /></label>
+                        <label>xA: <input type="number" step="0.01" name="xa" /></label>
+                        <label>Pressioni: <input type="number" name="pressures" value="0" /></label>
+                        <label>Intercetti: <input type="number" name="interceptions" value="0" /></label>
+                        <label>Coinvolgimento (%): <input type="number" step="0.1" name="involvement_pct" /></label>
+                    </div>
+                </div>
+
+                <!-- Step 6: Psychological Metrics -->
+                <div class="wizard-content" data-step="6" style="display:none;">
+                    <h3>Metriche Psicologiche</h3>
+                    <div class="form-grid">
+                        <label>Attenzione (0-100): <input type="number" name="attention_score" min="0" max="100" /></label>
+                        <label>Motivazione (1-10): <input type="number" name="motivation" min="1" max="10" /></label>
+                        <label>Gestione stress (1-10): <input type="number" name="stress_management" min="1" max="10" /></label>
+                        <label>Autostima (1-10): <input type="number" name="self_esteem" min="1" max="10" /></label>
+                        <label>Leadership (1-10): <input type="number" name="team_leadership" min="1" max="10" /></label>
+                        <label>Umore pre (1-10): <input type="number" name="mood_pre" min="1" max="10" /></label>
+                        <label>Umore post (1-10): <input type="number" name="mood_post" min="1" max="10" /></label>
+                    </div>
+                </div>
+
+                <!-- Step 7: Summary -->
+                <div class="wizard-content" data-step="7" style="display:none;">
+                    <h3>Riepilogo</h3>
+                    <div id="summary-content"></div>
+                </div>
+
+                <div class="wizard-buttons">
+                    <button type="button" id="prev-btn" onclick="prevStep()" style="display:none;">Indietro</button>
+                    <button type="button" id="next-btn" onclick="nextStep()">Avanti</button>
+                    <button type="submit" id="submit-btn" style="display:none;">Salva Sessione</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- ANALYTICS TAB -->
+        <div id="analytics-tab" class="tab-content">
+            <h2>Analytics</h2>
+            <div class="controls">
+                <select id="analytics-player-select">
+                    <option value="">-- Seleziona giocatore --</option>
+                </select>
+                <button onclick="loadPlayerAnalytics()">Carica Dati</button>
+                <button onclick="exportPlayerData()">Esporta CSV</button>
+            </div>
+            <div id="analytics-content">
+                <div class="chart-container">
+                    <canvas id="performance-chart"></canvas>
+                </div>
+                <div id="player-stats"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

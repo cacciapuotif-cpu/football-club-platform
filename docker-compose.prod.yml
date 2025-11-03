@@ -1,0 +1,287 @@
+version: '3.8'
+
+# Production-ready docker-compose with:
+# - Postgres with RLS
+# - Redis
+# - MinIO (S3)
+# - MLflow
+# - OpenTelemetry Collector
+# - Prometheus
+# - Grafana
+# - Tempo (traces)
+# - Backend API + Worker
+# - Frontend
+
+services:
+  # ====================
+  # DATABASE
+  # ====================
+  db:
+    image: postgres:16-alpine
+    container_name: football_club_platform_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-football_club_platform}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ====================
+  # REDIS
+  # ====================
+  redis:
+    image: redis:7-alpine
+    container_name: football_club_platform_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ====================
+  # MINIO (S3-compatible storage)
+  # ====================
+  minio:
+    image: minio/minio:latest
+    container_name: football_club_platform_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # MinIO bucket init
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 ${S3_ACCESS_KEY:-minioadmin} ${S3_SECRET_KEY:-minioadmin123};
+      mc mb myminio/${S3_BUCKET:-football-media} --ignore-existing;
+      mc policy set public myminio/${S3_BUCKET:-football-media};
+      echo 'Bucket ready';
+      "
+
+  # ====================
+  # MLFLOW
+  # ====================
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.10.2
+    container_name: football_club_platform_mlflow
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_BACKEND_STORE_URI: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-football_club_platform}
+      MLFLOW_ARTIFACT_ROOT: s3://${S3_BUCKET:-football-media}/mlflow
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-minioadmin123}
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-football_club_platform}
+      --default-artifact-root s3://${S3_BUCKET:-football-media}/mlflow
+    depends_on:
+      - db
+      - minio
+    restart: unless-stopped
+
+  # ====================
+  # OBSERVABILITY STACK
+  # ====================
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.92.0
+    container_name: football_club_platform_otel
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./infra/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Prometheus metrics
+    restart: unless-stopped
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    container_name: football_club_platform_prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    restart: unless-stopped
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:10.2.3
+    container_name: football_club_platform_grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana-dashboards:/etc/grafana/provisioning/dashboards
+      - ./infra/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  # Tempo (distributed tracing)
+  tempo:
+    image: grafana/tempo:2.3.1
+    container_name: football_club_platform_tempo
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./infra/tempo.yaml:/etc/tempo.yaml
+      - tempo_data:/tmp/tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP
+      - "4317"        # OTLP gRPC (internal)
+    restart: unless-stopped
+
+  # ====================
+  # BACKEND API
+  # ====================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: football-club-platform-backend:latest
+    container_name: football_club_platform_backend
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      SKIP_AUTH: ${SKIP_AUTH:-true}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-football_club_platform}
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_BACKEND: s3
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET:-football-media}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      JWT_SECRET: ${JWT_SECRET}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - backend_storage:/data/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ====================
+  # RQ WORKER
+  # ====================
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: football-club-platform-worker:latest
+    container_name: football_club_platform_worker
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-football_club_platform}
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_BACKEND: s3
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET:-football-media}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - db
+      - redis
+      - minio
+    command: rq worker --url redis://redis:6379/0 default video ml
+    restart: unless-stopped
+
+  # ====================
+  # FRONTEND
+  # ====================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SKIP_AUTH: "true"
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    image: football-club-platform-frontend:latest
+    container_name: football_club_platform_frontend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+      NEXT_PUBLIC_APP_NAME: "Football Club Platform"
+      NEXT_PUBLIC_SKIP_AUTH: "true"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:
+  tempo_data:
+  backend_storage:
+
+networks:
+  default:
+    name: football_club_platform_network

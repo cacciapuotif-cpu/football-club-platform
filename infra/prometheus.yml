@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Backend application metrics (if /metrics endpoint is enabled)
+  - job_name: 'football_club_platform-backend'
+    static_configs:
+      - targets: ['backend:8000']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # Application metrics exported by OTEL Collector (Prometheus exporter)
+  - job_name: 'otel-collector-app-metrics'
+    static_configs:
+      - targets: ['otel-collector:8889']
+    scrape_interval: 15s
+
+  # OTEL Collector internal telemetry (health, performance)
+  - job_name: 'otel-collector-internal'
+    static_configs:
+      - targets: ['otel-collector:8888']
+    scrape_interval: 30s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 60s

@@ -1,0 +1,4 @@
+player_code,session_date,session_type,minutes_played,coach_rating,notes,status,resting_hr_bpm,distance_km,sprints_over_25kmh,rpe,passes_attempted,passes_completed,progressive_passes,shots,shots_on_target,successful_dribbles,failed_dribbles,ball_losses,ball_recoveries,interceptions,pressures,motivation,attention_score
+P-0017,2025-10-10,TRAINING,75,7.5,Allenamento tattico,OK,58,10.5,18,7,65,58,12,2,1,4,2,8,10,6,20,8,75
+P-0017,2025-10-12,TRAINING,80,7.0,Esercizi tecnici,OK,60,9.8,15,6,70,62,10,3,2,5,1,7,12,5,18,7,72
+P-0017,2025-10-14,MATCH,90,8.0,Partita campionato,OK,62,11.2,22,8,75,65,15,4,3,6,2,9,14,8,25,9,80
