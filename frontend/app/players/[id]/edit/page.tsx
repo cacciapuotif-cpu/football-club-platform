@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import { API_URL } from '@/lib/api'
 
 export default function EditPlayerPage() {
   const router = useRouter()
@@ -66,7 +67,7 @@ export default function EditPlayerPage() {
         headers['Authorization'] = `Bearer ${token}`
       }
 
-      const response = await fetch(`http://localhost:8000/api/v1/players/${playerId}`, {
+      const response = await fetch(`${API_URL}/api/v1/players/${playerId}`, {
         headers,
       })
 
@@ -155,7 +156,7 @@ export default function EditPlayerPage() {
         headers['Authorization'] = `Bearer ${token}`
       }
 
-      const response = await fetch(`http://localhost:8000/api/v1/players/${playerId}`, {
+      const response = await fetch(`${API_URL}/api/v1/players/${playerId}`, {
         method: 'PATCH',
         headers,
         body: JSON.stringify(apiData),

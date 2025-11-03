@@ -5,12 +5,11 @@
 
 import axios from 'axios';
 
-// Get API base URL (includes /api/v1 prefix) and strip trailing slashes
-const base = (
-  (typeof window !== 'undefined'
-    ? process.env.NEXT_PUBLIC_API_URL
-    : process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:8000/api/v1'
-).replace(/\/+$/, '');
+// Get API base URL and add /api/v1 prefix, strip trailing slashes
+const apiUrl = (typeof window !== 'undefined'
+  ? process.env.NEXT_PUBLIC_API_URL
+  : process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:8012';
+const base = `${apiUrl}/api/v1`.replace(/\/+$/, '');
 
 // Create axios instance with normalized baseURL
 export const http = axios.create({
