@@ -24,7 +24,7 @@ class PlayerStats(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     player_id: UUID = Field(foreign_key="players.id", index=True)
     match_id: UUID | None = Field(default=None, foreign_key="matches.id", index=True)
-    session_id: UUID | None = Field(default=None, foreign_key="sessions.id", index=True)
+    session_id: UUID | None = Field(default=None, foreign_key="training_sessions.id", index=True)
 
     season: str = Field(max_length=20, index=True)  # e.g., "2024-2025"
     date: date

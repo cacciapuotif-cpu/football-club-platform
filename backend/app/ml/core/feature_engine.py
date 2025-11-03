@@ -14,7 +14,8 @@ from sqlmodel import select
 from app.models.player import Player
 from app.models.session import TrainingSession
 from app.models.performance import TechnicalStats, TacticalCognitive, PsychologicalProfile
-from app.models.test import PhysicalTest, WellnessData
+from app.models.test import PhysicalTest
+from app.models.wellness import WellnessData
 from app.models.match import Match
 
 logger = logging.getLogger(__name__)

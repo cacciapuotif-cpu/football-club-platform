@@ -11,7 +11,7 @@ from sqlmodel import select
 
 from app.database import get_session
 from app.dependencies import get_current_user
-from app.models.test import WellnessData
+from app.models.wellness import WellnessData
 from app.models.player import Player
 from app.models.user import User
 from app.schemas.wellness import (

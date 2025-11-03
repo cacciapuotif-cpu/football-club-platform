@@ -11,7 +11,8 @@ from sqlmodel import select
 
 from app.models.advanced_tracking import AutomatedInsight, InsightPriority, InsightType, PlayerGoal
 from app.models.player import Player
-from app.models.test import PhysicalTest, TechnicalTest, WellnessData
+from app.models.test import PhysicalTest, TechnicalTest
+from app.models.wellness import WellnessData
 
 
 class InsightsGenerator:

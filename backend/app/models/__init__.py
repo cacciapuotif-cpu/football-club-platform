@@ -18,11 +18,13 @@ from app.models.performance import (
 from app.models.plan import PlanAdherence, PlanTask, TrainingPlan
 from app.models.player import Player
 from app.models.player_stats import PlayerStats
+from app.models.player_training_stats import PlayerTrainingStats
 from app.models.report import Report, ReportCache
 from app.models.sensor import SensorData
 from app.models.session import TrainingSession
 from app.models.team import Season, Team
-from app.models.test import PhysicalTest, TacticalTest, TechnicalTest, WellnessData
+from app.models.test import PhysicalTest, TacticalTest, TechnicalTest
+from app.models.wellness import WellnessData
 from app.models.user import User
 from app.models.video import Video, VideoEvent
 from app.models.advanced_tracking import (
@@ -40,6 +42,7 @@ __all__ = [
     "Season",
     "Player",
     "PlayerStats",
+    "PlayerTrainingStats",
     "Match",
     "Attendance",
     "TrainingSession",

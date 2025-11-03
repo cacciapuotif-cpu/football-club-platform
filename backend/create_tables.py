@@ -11,7 +11,8 @@ from app.models.team import Team, Season
 from app.models.player import Player
 from app.models.match import Match, Attendance
 from app.models.session import TrainingSession
-from app.models.test import PhysicalTest, TechnicalTest, TacticalTest, WellnessData
+from app.models.test import PhysicalTest, TechnicalTest, TacticalTest
+from app.models.wellness import WellnessData
 from app.models.injury import Injury
 from app.models.performance import (
     TechnicalStats,

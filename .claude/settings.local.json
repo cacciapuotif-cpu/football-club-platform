@@ -123,7 +123,8 @@
       "Bash(alembic upgrade:*)",
       "Bash(npx tsc:*)",
       "Bash(rm:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []

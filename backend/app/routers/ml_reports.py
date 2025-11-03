@@ -13,7 +13,7 @@ from sqlmodel import select
 from app.database import get_session, set_rls_tenant
 from app.dependencies import get_current_user, require_staff
 from app.models.player import Player
-from app.models.test import WellnessData
+from app.models.wellness import WellnessData
 from app.models.user import User
 from app.services.ml_predictor import get_ml_predictor
 from app.services.readiness_calculator import ReadinessCalculator, calculate_readiness_score

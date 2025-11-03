@@ -12,7 +12,7 @@ from sqlmodel import select
 
 from app.models.player import Player
 from app.models.session import TrainingSession
-from app.models.test import WellnessData
+from app.models.wellness import WellnessData
 from app.services.readiness_calculator import ReadinessCalculator
 
 logger = logging.getLogger(__name__)

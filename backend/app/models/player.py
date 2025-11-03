@@ -11,6 +11,7 @@ from sqlalchemy import func
 if TYPE_CHECKING:
     from app.models.team import Team
     from app.models.player_stats import PlayerStats
+    from app.models.player_training_stats import PlayerTrainingStats
 
 
 class PlayerRole(str, Enum):
@@ -80,6 +81,26 @@ class Player(SQLModel, table=True):
     body_fat_pct: float | None = Field(default=None)
     lean_mass_kg: float | None = Field(default=None)
 
+    # Physical condition & injury
+    physical_condition: str | None = Field(default="normal", max_length=50)  # excellent, good, normal, poor
+    injury_prone: bool = Field(default=False)
+
+    # ============================================
+    # TACTICAL ATTRIBUTES (1-100)
+    # ============================================
+    tactical_awareness: int = Field(default=50, ge=0, le=100)
+    positioning: int = Field(default=50, ge=0, le=100)
+    decision_making: int = Field(default=50, ge=0, le=100)
+    work_rate: int = Field(default=50, ge=0, le=100)
+
+    # ============================================
+    # PSYCHOLOGICAL ATTRIBUTES (1-100)
+    # ============================================
+    mental_strength: int = Field(default=50, ge=0, le=100)
+    leadership: int = Field(default=50, ge=0, le=100)
+    concentration: int = Field(default=50, ge=0, le=100)
+    adaptability: int = Field(default=50, ge=0, le=100)
+
     # Market & Contract
     market_value_eur: float | None = Field(default=None, ge=0)
     contract_expiry_date: date | None = Field(default=None)
@@ -111,6 +132,7 @@ class Player(SQLModel, table=True):
 
     # Relationships
     player_stats: list["PlayerStats"] = Relationship(back_populates="player")
+    training_stats: list["PlayerTrainingStats"] = Relationship(back_populates="player")
 
     # Timestamps
     created_at: datetime = Field(

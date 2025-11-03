@@ -16,10 +16,21 @@ class SessionType(str, Enum):
     """Training session types."""
 
     TRAINING = "TRAINING"
+    TECHNICAL = "TECHNICAL"
+    TACTICAL = "TACTICAL"
+    PHYSICAL = "PHYSICAL"
+    PSYCHOLOGICAL = "PSYCHOLOGICAL"
     FRIENDLY = "FRIENDLY"
     RECOVERY = "RECOVERY"
     GYM = "GYM"
-    TACTICAL = "TACTICAL"
+
+
+class SessionIntensity(str, Enum):
+    """Training session intensity levels."""
+
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
 
 
 class TrainingSession(SQLModel, table=True):
@@ -35,9 +46,12 @@ class TrainingSession(SQLModel, table=True):
 
     # Content
     focus: str | None = Field(default=None, max_length=255)  # Tecnico, Tattico, Fisico
+    focus_area: str | None = Field(default=None, max_length=255)  # Specific area (passing, defense, etc.)
     description: str | None = Field(default=None, sa_column=Column(Text))
+    coach_notes: str | None = Field(default=None, sa_column=Column(Text))
 
     # Intensity
+    intensity: SessionIntensity | None = Field(default=SessionIntensity.MEDIUM)
     planned_intensity: int | None = Field(default=None)  # 1-10
     actual_intensity_avg: float | None = Field(default=None)  # From RPE
 

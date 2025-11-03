@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.player import Player, PlayerRole
 from app.models.player_stats import PlayerStats
+from app.models.player_training_stats import PlayerTrainingStats
+from app.models.session import TrainingSession
 
 logger = logging.getLogger(__name__)
 
@@ -440,6 +442,344 @@ class AdvancedMLAlgorithms:
             return multipliers.get(role, 0.7)
         except (ValueError, KeyError):
             return 0.7
+
+
+    @staticmethod
+    async def calculate_training_consistency(
+        session: AsyncSession,
+        player_id: str,
+        days: int = 14
+    ) -> float:
+        """
+        Calculate training consistency score based on recent training sessions.
+
+        Args:
+            session: Database session
+            player_id: Player UUID
+            days: Number of days to analyze
+
+        Returns:
+            Training consistency score (0-100)
+        """
+        cutoff_date = datetime.now() - timedelta(days=days)
+
+        # Fetch recent training stats with session info
+        stmt = (
+            select(PlayerTrainingStats, TrainingSession)
+            .join(TrainingSession, PlayerTrainingStats.training_session_id == TrainingSession.id)
+            .where(
+                and_(
+                    PlayerTrainingStats.player_id == player_id,
+                    TrainingSession.session_date >= cutoff_date
+                )
+            )
+            .order_by(TrainingSession.session_date.desc())
+        )
+
+        result = await session.execute(stmt)
+        training_data = result.all()
+
+        if not training_data:
+            return 50.0  # Default neutral score
+
+        total_score = 0.0
+        total_weight = 0.0
+
+        for training_stat, training_session in training_data:
+            # Intensity weight multiplier
+            intensity_weights = {"LOW": 0.7, "MEDIUM": 1.0, "HIGH": 1.3}
+            intensity_weight = intensity_weights.get(str(training_session.intensity), 1.0)
+
+            # Calculate session score (0-10 scale)
+            session_score = (
+                training_stat.technical_rating * 0.3 +
+                training_stat.tactical_execution * 0.3 +
+                training_stat.physical_performance * 0.2 +
+                training_stat.mental_focus * 0.2
+            )
+
+            # Convert to 0-100 scale
+            session_score_100 = session_score * 10
+
+            total_score += session_score_100 * intensity_weight
+            total_weight += intensity_weight
+
+        consistency_score = total_score / total_weight if total_weight > 0 else 50.0
+        return round(consistency_score, 2)
+
+    @staticmethod
+    async def calculate_comprehensive_performance_index(
+        session: AsyncSession,
+        player_id: str,
+        player_role: str,
+        match_stats: Optional[PlayerStats] = None
+    ) -> float:
+        """
+        Calculate comprehensive performance index combining match and training data.
+
+        Args:
+            session: Database session
+            player_id: Player UUID
+            player_role: Player's primary role
+            match_stats: Optional latest match stats
+
+        Returns:
+            Comprehensive performance index (0-100)
+        """
+        weights = {
+            'match_performance': 0.6,
+            'training_consistency': 0.25,
+            'physical_condition': 0.15
+        }
+
+        # 1. Match performance score
+        match_score = 50.0
+        if match_stats:
+            match_score = AdvancedMLAlgorithms.calculate_performance_index(
+                match_stats, player_role
+            )
+
+        # 2. Training consistency score
+        training_score = await AdvancedMLAlgorithms.calculate_training_consistency(
+            session, player_id
+        )
+
+        # 3. Physical condition score
+        physical_score = await AdvancedMLAlgorithms._calculate_physical_condition_score(
+            session, player_id
+        )
+
+        # Weighted combination
+        comprehensive_index = (
+            match_score * weights['match_performance'] +
+            training_score * weights['training_consistency'] +
+            physical_score * weights['physical_condition']
+        )
+
+        return round(min(100, max(0, comprehensive_index)), 2)
+
+    @staticmethod
+    async def _calculate_physical_condition_score(
+        session: AsyncSession,
+        player_id: str
+    ) -> float:
+        """Calculate physical condition score from recent training data."""
+        stmt = (
+            select(PlayerTrainingStats)
+            .where(PlayerTrainingStats.player_id == player_id)
+            .order_by(PlayerTrainingStats.created_at.desc())
+            .limit(5)
+        )
+
+        result = await session.execute(stmt)
+        recent_training = result.scalars().all()
+
+        if not recent_training:
+            return 50.0
+
+        # Calculate averages
+        avg_physical = sum(t.physical_performance for t in recent_training) / len(recent_training)
+        avg_endurance = sum(
+            t.endurance_index for t in recent_training if t.endurance_index
+        ) / len([t for t in recent_training if t.endurance_index]) if any(
+            t.endurance_index for t in recent_training
+        ) else 70.0
+        avg_recovery = sum(
+            t.recovery_rate for t in recent_training if t.recovery_rate
+        ) / len([t for t in recent_training if t.recovery_rate]) if any(
+            t.recovery_rate for t in recent_training
+        ) else 70.0
+
+        # Average fatigue/wellness
+        avg_fatigue = sum(
+            t.fatigue_level for t in recent_training if t.fatigue_level
+        ) / len([t for t in recent_training if t.fatigue_level]) if any(
+            t.fatigue_level for t in recent_training
+        ) else 5.0
+
+        # Combine (lower fatigue = better)
+        fatigue_score = (10 - avg_fatigue) * 10  # Convert to 0-100
+
+        physical_score = (
+            (avg_physical * 10) * 0.4 +
+            avg_endurance * 0.3 +
+            avg_recovery * 0.2 +
+            fatigue_score * 0.1
+        )
+
+        return round(min(100, max(0, physical_score)), 2)
+
+    @staticmethod
+    async def generate_training_recommendations(
+        session: AsyncSession,
+        player: Player
+    ) -> Dict[str, Any]:
+        """
+        Generate personalized training recommendations based on player attributes.
+
+        Args:
+            session: Database session
+            player: Player object
+
+        Returns:
+            Dictionary with training recommendations
+        """
+        recommendations = {
+            'focus_areas': [],
+            'training_types': [],
+            'intensity': 'MEDIUM',
+            'estimated_duration_min': 90,
+            'rationale': '',
+            'specific_drills': []
+        }
+
+        # Analyze tactical attributes
+        tactical_issues = []
+        if player.tactical_awareness < 70:
+            tactical_issues.append('Tactical Awareness')
+            recommendations['training_types'].append('TACTICAL')
+            recommendations['specific_drills'].append('Positional play exercises')
+
+        if player.positioning < 70:
+            tactical_issues.append('Positioning')
+            recommendations['training_types'].append('TACTICAL')
+            recommendations['specific_drills'].append('Shape drills')
+
+        if player.decision_making < 70:
+            tactical_issues.append('Decision Making')
+            recommendations['training_types'].append('TACTICAL')
+            recommendations['specific_drills'].append('Small-sided games')
+
+        # Analyze psychological attributes
+        psychological_issues = []
+        if player.mental_strength < 70:
+            psychological_issues.append('Mental Strength')
+            recommendations['training_types'].append('PSYCHOLOGICAL')
+            recommendations['specific_drills'].append('Pressure situations training')
+
+        if player.concentration < 70:
+            psychological_issues.append('Concentration')
+            recommendations['training_types'].append('PSYCHOLOGICAL')
+
+        # Analyze physical condition
+        physical_issues = []
+        if player.physical_condition == 'poor':
+            physical_issues.append('Physical Condition')
+            recommendations['training_types'].append('PHYSICAL')
+            recommendations['intensity'] = 'LOW'
+            recommendations['specific_drills'].extend([
+                'Recovery sessions',
+                'Light aerobic work'
+            ])
+        elif player.physical_condition == 'normal':
+            recommendations['training_types'].append('PHYSICAL')
+            recommendations['specific_drills'].append('Conditioning drills')
+
+        # Check recent training performance
+        recent_training_stmt = (
+            select(PlayerTrainingStats)
+            .where(PlayerTrainingStats.player_id == player.id)
+            .order_by(PlayerTrainingStats.created_at.desc())
+            .limit(3)
+        )
+        recent_result = await session.execute(recent_training_stmt)
+        recent_training = recent_result.scalars().all()
+
+        technical_avg = 0.0
+        if recent_training:
+            technical_avg = sum(t.technical_rating for t in recent_training) / len(recent_training)
+            if technical_avg < 6:
+                recommendations['training_types'].append('TECHNICAL')
+                recommendations['specific_drills'].extend([
+                    'Passing accuracy drills',
+                    'Ball control exercises'
+                ])
+
+        # Combine all focus areas
+        recommendations['focus_areas'] = tactical_issues + psychological_issues + physical_issues
+
+        # Generate rationale
+        rationale_parts = []
+        if tactical_issues:
+            rationale_parts.append(f"Focus on tactical development: {', '.join(tactical_issues)}")
+        if psychological_issues:
+            rationale_parts.append(f"Mental training needed for: {', '.join(psychological_issues)}")
+        if physical_issues:
+            rationale_parts.append(f"Physical work required: {', '.join(physical_issues)}")
+        if technical_avg > 0 and technical_avg < 6:
+            rationale_parts.append(f"Technical skills below standard (avg: {technical_avg:.1f}/10)")
+
+        recommendations['rationale'] = '. '.join(rationale_parts) if rationale_parts else 'Continue balanced training program'
+
+        # Remove duplicates from training_types
+        recommendations['training_types'] = list(set(recommendations['training_types']))
+
+        return recommendations
+
+    @staticmethod
+    async def predict_player_form_comprehensive(
+        session: AsyncSession,
+        player_id: str,
+        upcoming_days: int = 7
+    ) -> Dict[str, Any]:
+        """
+        Predict player form for upcoming days using comprehensive data.
+
+        Args:
+            session: Database session
+            player_id: Player UUID
+            upcoming_days: Days to predict ahead
+
+        Returns:
+            Dictionary with form prediction and factors
+        """
+        # Get recent match performance
+        match_form = await AdvancedMLAlgorithms.predict_player_form(
+            session, player_id, matches_to_analyze=5
+        )
+
+        # Get training consistency
+        training_consistency = await AdvancedMLAlgorithms.calculate_training_consistency(
+            session, player_id
+        )
+
+        # Get physical condition
+        physical_condition = await AdvancedMLAlgorithms._calculate_physical_condition_score(
+            session, player_id
+        )
+
+        # Weighted prediction
+        weights = {
+            'match_form': 0.5,
+            'training': 0.3,
+            'physical': 0.2
+        }
+
+        predicted_form = (
+            match_form * weights['match_form'] +
+            (training_consistency / 10) * weights['training'] +
+            (physical_condition / 10) * weights['physical']
+        )
+
+        # Trend analysis
+        trend = "stable"
+        if training_consistency > 75 and physical_condition > 75:
+            trend = "improving"
+        elif training_consistency < 50 or physical_condition < 50:
+            trend = "declining"
+
+        return {
+            'predicted_form': round(predicted_form, 2),
+            'confidence': min(100, int((training_consistency + physical_condition) / 2)),
+            'trend': trend,
+            'factors': {
+                'match_form': round(match_form, 2),
+                'training_consistency': round(training_consistency, 2),
+                'physical_condition': round(physical_condition, 2)
+            },
+            'days_ahead': upcoming_days,
+            'recommendation': 'Match ready' if predicted_form >= 7.0 else 'Needs improvement'
+        }
 
 
 # Export singleton instance

@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.models.player import Player
 from app.models.sensor import SensorData
-from app.models.test import WellnessData
+from app.models.wellness import WellnessData
 from app.models.organization import Organization
 
 

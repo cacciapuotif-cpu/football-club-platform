@@ -10,7 +10,7 @@ from app.models.organization import Organization
 from app.models.team import Team, Season
 from app.models.player import Player
 from app.models.session import TrainingSession
-from app.models.test import WellnessData
+from app.models.wellness import WellnessData
 
 def calculate_birth_date(age):
     """Calculate birth date from age."""

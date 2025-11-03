@@ -12,7 +12,8 @@ from sqlmodel import select
 from app.database import get_session
 from app.dependencies import get_current_user
 from app.models.player import Player
-from app.models.test import PhysicalTest, WellnessData
+from app.models.test import PhysicalTest
+from app.models.wellness import WellnessData
 from app.models.user import User
 
 router = APIRouter()

@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.models.test import WellnessData
+from app.models.wellness import WellnessData
 
 
 class ReadinessCalculator:
