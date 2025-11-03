@@ -11,18 +11,15 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { API_URL } from "@/lib/api";
 
 type TrendPoint = { idx: number; xg: number; keyPasses: number };
 
 interface PlayerTrendProps {
   playerId: string;
-  apiUrl?: string;
 }
 
-export default function PlayerTrend({
-  playerId,
-  apiUrl = "http://localhost:8000",
-}: PlayerTrendProps) {
+export default function PlayerTrend({ playerId }: PlayerTrendProps) {
   const [data, setData] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +29,7 @@ export default function PlayerTrend({
       try {
         setLoading(true);
         const response = await fetch(
-          `${apiUrl}/api/v1/advanced-analytics/ml/player/${playerId}/summary`
+          `${API_URL}/api/v1/analytics/player/${playerId}/summary`
         );
 
         if (!response.ok) {
@@ -60,7 +57,7 @@ export default function PlayerTrend({
         setLoading(false);
       }
     })();
-  }, [playerId, apiUrl]);
+  }, [playerId]);
 
   if (loading) {
     return (

@@ -11,18 +11,15 @@ import {
   Legend,
   Tooltip,
 } from "recharts";
+import { API_URL } from "@/lib/api";
 
 type RadarDatum = { metric: string; value: number; fullMark: number };
 
 interface PlayerRadarProps {
   playerId: string;
-  apiUrl?: string;
 }
 
-export default function PlayerRadar({
-  playerId,
-  apiUrl = "http://localhost:8000",
-}: PlayerRadarProps) {
+export default function PlayerRadar({ playerId }: PlayerRadarProps) {
   const [data, setData] = useState<RadarDatum[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +29,7 @@ export default function PlayerRadar({
       try {
         setLoading(true);
         const response = await fetch(
-          `${apiUrl}/api/v1/advanced-analytics/ml/player/${playerId}/summary`
+          `${API_URL}/api/v1/analytics/player/${playerId}/summary`
         );
 
         if (!response.ok) {
@@ -73,7 +70,7 @@ export default function PlayerRadar({
         setLoading(false);
       }
     })();
-  }, [playerId, apiUrl]);
+  }, [playerId]);
 
   if (loading) {
     return (

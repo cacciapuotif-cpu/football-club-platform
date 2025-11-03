@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { API_URL } from "@/lib/api";
 
 type SquadRow = {
   player_id: string;
@@ -11,13 +12,7 @@ type SquadRow = {
   avg_duels_won: number;
 };
 
-interface SquadTableProps {
-  apiUrl?: string;
-}
-
-export default function SquadTable({
-  apiUrl = "http://localhost:8000",
-}: SquadTableProps) {
+export default function SquadTable() {
   const [rows, setRows] = useState<SquadRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +23,7 @@ export default function SquadTable({
         setLoading(true);
 
         // Fetch players list
-        const playersResponse = await fetch(`${apiUrl}/api/v1/players`);
+        const playersResponse = await fetch(`${API_URL}/api/v1/analytics/players`);
         if (!playersResponse.ok) {
           throw new Error(`HTTP ${playersResponse.status} fetching players`);
         }
@@ -36,13 +31,13 @@ export default function SquadTable({
         const players = await playersResponse.json();
         const out: SquadRow[] = [];
 
-        // Fetch summary for each player (limit to first 20 for performance)
-        const playersToFetch = players.slice(0, 20);
+        // Fetch summary for each player (limit to first 10 for performance)
+        const playersToFetch = players.slice(0, 10);
 
         for (const p of playersToFetch) {
           try {
             const summaryResponse = await fetch(
-              `${apiUrl}/api/v1/advanced-analytics/ml/player/${p.id}/summary`
+              `${API_URL}/api/v1/analytics/player/${p.id}/summary`
             );
 
             if (!summaryResponse.ok) {
@@ -74,7 +69,7 @@ export default function SquadTable({
         setLoading(false);
       }
     })();
-  }, [apiUrl]);
+  }, []);
 
   if (loading) {
     return (

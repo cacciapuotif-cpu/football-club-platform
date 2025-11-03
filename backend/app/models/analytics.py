@@ -1,173 +1,108 @@
-"""Analytics models for ML training and predictions."""
+"""Analytics models for ML training and predictions (sync SQLAlchemy)."""
 
-from datetime import datetime, date
-from typing import TYPE_CHECKING, Optional
-from uuid import UUID, uuid4
-
-from sqlmodel import Column, DateTime, Field, Relationship, SQLModel
-from sqlalchemy import func, UniqueConstraint
-
-if TYPE_CHECKING:
-    from app.models.player import Player
-    from app.models.organization import Organization
+from sqlalchemy import Column, Integer, String, Boolean, Float, Date, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+from app.db_sync import Base
 
 
-class Match(SQLModel, table=True):
-    """Match model for tracking games."""
-
+class Match(Base):
     __tablename__ = "matches"
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    date: date = Field(nullable=False, index=True)
-    opponent: Optional[str] = Field(default=None, max_length=100)
-    competition: Optional[str] = Field(default=None, max_length=100)
-    home: bool = Field(default=True, nullable=False)
-    minutes: Optional[int] = Field(default=None)
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(UUID(as_uuid=True), index=True)
+    date = Column(Date, nullable=False)
+    opponent = Column(String(100))
+    competition = Column(String(100))
+    home = Column(Boolean, nullable=False, server_default='true')
+    minutes = Column(Integer)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
-    # Multi-tenancy
-    organization_id: UUID = Field(foreign_key="organizations.id", index=True)
-
-    # Timestamps
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
-    )
-
-    # Relationships
-    player_stats: list["PlayerMatchStat"] = Relationship(back_populates="match")
+    players_stats = relationship("PlayerMatchStat", back_populates="match", cascade="all, delete-orphan")
 
 
-class TrainingSession(SQLModel, table=True):
-    """Training session model."""
-
+class TrainingSession(Base):
     __tablename__ = "training_sessions"
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    date: date = Field(nullable=False, index=True)
-    session_type: Optional[str] = Field(default=None, max_length=50)
-    duration_min: Optional[int] = Field(default=None)
-    rpe: Optional[float] = Field(default=None)
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(UUID(as_uuid=True), index=True)
+    date = Column(Date, nullable=False)
+    session_type = Column(String(50))
+    duration_min = Column(Integer)
+    rpe = Column(Float)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
-    # Multi-tenancy
-    organization_id: UUID = Field(foreign_key="organizations.id", index=True)
-
-    # Timestamps
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
-    )
-
-    # Relationships
-    player_loads: list["PlayerTrainingLoad"] = Relationship(back_populates="session")
+    player_loads = relationship("PlayerTrainingLoad", back_populates="session", cascade="all, delete-orphan")
 
 
-class PlayerMatchStat(SQLModel, table=True):
-    """Player match statistics."""
-
+class PlayerMatchStat(Base):
     __tablename__ = "player_match_stats"
-    __table_args__ = (UniqueConstraint("player_id", "match_id", name="uq_player_match"),)
+    __table_args__ = (UniqueConstraint('player_id', 'match_id', name='uq_player_match'),)
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    player_id: UUID = Field(foreign_key="players.id", nullable=False, index=True)
-    match_id: UUID = Field(foreign_key="matches.id", nullable=False, index=True)
-    minutes: Optional[int] = Field(default=None)
-    goals: int = Field(default=0)
-    assists: int = Field(default=0)
-    shots: int = Field(default=0)
-    xg: float = Field(default=0.0)
-    key_passes: int = Field(default=0)
-    duels_won: int = Field(default=0)
-    sprints: int = Field(default=0)
-    pressures: int = Field(default=0)
-    def_actions: int = Field(default=0)
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(UUID(as_uuid=True), index=True)
+    player_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    match_id = Column(Integer, ForeignKey("matches.id", ondelete="CASCADE"), nullable=False)
+    minutes = Column(Integer)
+    goals = Column(Integer, server_default='0')
+    assists = Column(Integer, server_default='0')
+    shots = Column(Integer, server_default='0')
+    xg = Column(Float, server_default='0')
+    key_passes = Column(Integer, server_default='0')
+    duels_won = Column(Integer, server_default='0')
+    sprints = Column(Integer, server_default='0')
+    pressures = Column(Integer, server_default='0')
+    def_actions = Column(Integer, server_default='0')
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
-    # Multi-tenancy
-    organization_id: UUID = Field(foreign_key="organizations.id", nullable=False)
-
-    # Timestamps
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
-    )
-
-    # Relationships
-    match: Optional["Match"] = Relationship(back_populates="player_stats")
-    player: Optional["Player"] = Relationship(back_populates="ml_match_stats")
+    match = relationship("Match", back_populates="players_stats")
+    # Note: player relationship handled separately to avoid circular imports
 
 
-class PlayerTrainingLoad(SQLModel, table=True):
-    """Player training load tracking."""
-
+class PlayerTrainingLoad(Base):
     __tablename__ = "player_training_load"
-    __table_args__ = (UniqueConstraint("player_id", "session_id", name="uq_player_session"),)
+    __table_args__ = (UniqueConstraint('player_id', 'session_id', name='uq_player_session'),)
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    player_id: UUID = Field(foreign_key="players.id", nullable=False, index=True)
-    session_id: UUID = Field(foreign_key="training_sessions.id", nullable=False, index=True)
-    load_acute: Optional[float] = Field(default=None)
-    load_chronic: Optional[float] = Field(default=None)
-    monotony: Optional[float] = Field(default=None)
-    strain: Optional[float] = Field(default=None)
-    injury_history_flag: bool = Field(default=False, nullable=False)
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(UUID(as_uuid=True), index=True)
+    player_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    session_id = Column(Integer, ForeignKey("training_sessions.id", ondelete="CASCADE"), nullable=False)
+    load_acute = Column(Float)
+    load_chronic = Column(Float)
+    monotony = Column(Float)
+    strain = Column(Float)
+    injury_history_flag = Column(Boolean, nullable=False, server_default='false')
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
-    # Multi-tenancy
-    organization_id: UUID = Field(foreign_key="organizations.id", nullable=False)
-
-    # Timestamps
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
-    )
-
-    # Relationships
-    session: Optional["TrainingSession"] = Relationship(back_populates="player_loads")
-    player: Optional["Player"] = Relationship(back_populates="ml_training_loads")
+    session = relationship("TrainingSession", back_populates="player_loads")
 
 
-class PlayerFeatureDaily(SQLModel, table=True):
-    """Daily player features for ML."""
-
+class PlayerFeatureDaily(Base):
     __tablename__ = "player_features_daily"
-    __table_args__ = (UniqueConstraint("player_id", "date", name="uq_player_date"),)
+    __table_args__ = (UniqueConstraint('player_id', 'date', name='uq_player_date'),)
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    player_id: UUID = Field(foreign_key="players.id", nullable=False, index=True)
-    date: date = Field(nullable=False, index=True)
-    rolling_7d_load: Optional[float] = Field(default=None)
-    rolling_21d_load: Optional[float] = Field(default=None)
-    form_score: Optional[float] = Field(default=None)
-    injury_flag: bool = Field(default=False, nullable=False)
-
-    # Multi-tenancy
-    organization_id: UUID = Field(foreign_key="organizations.id", nullable=False)
-
-    # Timestamps
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
-    )
-
-    # Relationship
-    player: Optional["Player"] = Relationship(back_populates="ml_features_daily")
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(UUID(as_uuid=True), index=True)
+    player_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    date = Column(Date, nullable=False)
+    rolling_7d_load = Column(Float)
+    rolling_21d_load = Column(Float)
+    form_score = Column(Float)
+    injury_flag = Column(Boolean, nullable=False, server_default='false')
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
-class PlayerPrediction(SQLModel, table=True):
-    """ML predictions for players."""
-
+class PlayerPrediction(Base):
     __tablename__ = "player_predictions"
-    __table_args__ = (UniqueConstraint("player_id", "date", "target", name="uq_player_date_target"),)
+    __table_args__ = (UniqueConstraint('player_id', 'date', 'target', name='uq_player_date_target'),)
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    player_id: UUID = Field(foreign_key="players.id", nullable=False, index=True)
-    date: date = Field(nullable=False, index=True)
-    target: str = Field(nullable=False, max_length=50)  # 'injury_risk' | 'performance_index'
-    model_name: str = Field(nullable=False, max_length=100)
-    model_version: str = Field(nullable=False, max_length=50)
-    y_pred: Optional[float] = Field(default=None)
-    y_proba: Optional[float] = Field(default=None)
-
-    # Multi-tenancy
-    organization_id: UUID = Field(foreign_key="organizations.id", nullable=False)
-
-    # Timestamps
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now())
-    )
-
-    # Relationship
-    player: Optional["Player"] = Relationship(back_populates="ml_predictions")
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(UUID(as_uuid=True), index=True)
+    player_id = Column(UUID(as_uuid=True), ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    date = Column(Date, nullable=False)
+    target = Column(String(50), nullable=False)
+    model_name = Column(String(100), nullable=False)
+    model_version = Column(String(50), nullable=False)
+    y_pred = Column(Float)
+    y_proba = Column(Float)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
