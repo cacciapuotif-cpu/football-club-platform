@@ -17,6 +17,7 @@ from app.models.performance import (
 )
 from app.models.plan import PlanAdherence, PlanTask, TrainingPlan
 from app.models.player import Player
+from app.models.player_stats import PlayerStats
 from app.models.report import Report, ReportCache
 from app.models.sensor import SensorData
 from app.models.session import TrainingSession
@@ -38,6 +39,7 @@ __all__ = [
     "Team",
     "Season",
     "Player",
+    "PlayerStats",
     "Match",
     "Attendance",
     "TrainingSession",

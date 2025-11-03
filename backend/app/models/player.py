@@ -10,6 +10,7 @@ from sqlalchemy import func
 
 if TYPE_CHECKING:
     from app.models.team import Team
+    from app.models.player_stats import PlayerStats
 
 
 class PlayerRole(str, Enum):
@@ -79,6 +80,10 @@ class Player(SQLModel, table=True):
     body_fat_pct: float | None = Field(default=None)
     lean_mass_kg: float | None = Field(default=None)
 
+    # Market & Contract
+    market_value_eur: float | None = Field(default=None, ge=0)
+    contract_expiry_date: date | None = Field(default=None)
+
     # GDPR & Consent
     consent_given: bool = Field(default=False)
     consent_date: datetime | None = Field(default=None)
@@ -89,6 +94,11 @@ class Player(SQLModel, table=True):
     medical_clearance: bool = Field(default=False)
     medical_clearance_expiry: date | None = Field(default=None)
 
+    # ML Computed Metrics
+    overall_rating: float | None = Field(default=6.0, ge=0, le=10)
+    potential_rating: float | None = Field(default=6.0, ge=0, le=10)
+    form_level: float | None = Field(default=5.0, ge=0, le=10)
+
     # Status
     is_active: bool = Field(default=True)
     is_injured: bool = Field(default=False)
@@ -98,6 +108,9 @@ class Player(SQLModel, table=True):
     organization_id: UUID = Field(foreign_key="organizations.id", index=True)
     team_id: UUID | None = Field(default=None, foreign_key="teams.id", index=True)
     team: Optional["Team"] = Relationship(back_populates="players")
+
+    # Relationships
+    player_stats: list["PlayerStats"] = Relationship(back_populates="player")
 
     # Timestamps
     created_at: datetime = Field(

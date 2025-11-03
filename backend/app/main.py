@@ -225,6 +225,7 @@ async def metrics():
 
 # Import routers
 from app.routers import (
+    advanced_analytics,
     advanced_tracking,
     alerts,
     analytics,
@@ -258,6 +259,7 @@ app.include_router(alerts.router, prefix=f"{api_prefix}/alerts", tags=["Alerts &
 app.include_router(wellness.router, prefix=f"{api_prefix}/wellness", tags=["Wellness Data"])
 app.include_router(performance.router, prefix=f"{api_prefix}/performance", tags=["Performance Modules"])
 app.include_router(analytics.router, prefix=f"{api_prefix}/analytics", tags=["Analytics & Reports"])
+app.include_router(advanced_analytics.router, prefix=f"{api_prefix}/advanced-analytics", tags=["Advanced ML Analytics & Scouting"])
 app.include_router(advanced_tracking.router, prefix=f"{api_prefix}/tracking", tags=["Advanced Tracking"])
 app.include_router(ml_predict.router, prefix=f"{api_prefix}/ml", tags=["ML Predictions"])
 app.include_router(ml_reports.router)  # ML Reports & Predictions (has its own prefix)
