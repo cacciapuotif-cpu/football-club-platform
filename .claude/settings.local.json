@@ -125,7 +125,9 @@
       "Bash(rm:*)",
       "Bash(tree:*)",
       "Bash(chmod:*)",
-      "Bash(alembic current:*)"
+      "Bash(alembic current:*)",
+      "Bash(do)",
+      "Bash(PLAYER_ID=\"33333333-3333-3333-3333-333333333331\")"
     ],
     "deny": [],
     "ask": []

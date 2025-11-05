@@ -49,6 +49,9 @@ class Player(SQLModel, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
 
+    # External ID for integration with other systems (optional, but recommended for idempotent seeding)
+    external_id: str | None = Field(default=None, max_length=255, unique=True, index=True)
+
     # Anagraphic
     first_name: str = Field(max_length=100)
     last_name: str = Field(max_length=100)
@@ -135,11 +138,12 @@ class Player(SQLModel, table=True):
     player_stats: list["PlayerStats"] = Relationship(back_populates="player")
     training_stats: list["PlayerTrainingStats"] = Relationship(back_populates="player")
 
-    # ML Analytics relationships
-    ml_match_stats: list["PlayerMatchStat"] = Relationship(back_populates="player")
-    ml_training_loads: list["PlayerTrainingLoad"] = Relationship(back_populates="player")
-    ml_features_daily: list["PlayerFeatureDaily"] = Relationship(back_populates="player")
-    ml_predictions: list["PlayerPrediction"] = Relationship(back_populates="player")
+    # ML Analytics relationships - COMMENTED OUT to fix mapper initialization errors
+    # TODO: Re-enable when analytics models are properly imported/defined
+    # ml_match_stats: list["PlayerMatchStat"] = Relationship(back_populates="player")
+    # ml_training_loads: list["PlayerTrainingLoad"] = Relationship(back_populates="player")
+    # ml_features_daily: list["PlayerFeatureDaily"] = Relationship(back_populates="player")
+    # ml_predictions: list["PlayerPrediction"] = Relationship(back_populates="player")
 
     # Timestamps
     created_at: datetime = Field(

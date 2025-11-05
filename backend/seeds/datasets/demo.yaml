@@ -1,0 +1,430 @@
+# ============================================================================
+# DEMO DATASET - Football Club Platform
+# For demonstrations, development, and UI testing
+# Rich dataset with multiple entities and relationships
+# ============================================================================
+
+01-organizations:
+  - slug: "demo-fc"
+    name: "Demo Football Club"
+    country: "IT"
+    email: "info@demo-fc.it"
+    phone: "+39 06 98765432"
+    address: "Viale dello Sport, 25"
+    city: "Roma"
+    logo_url: "/static/logos/demo-fc.png"
+    timezone: "Europe/Rome"
+    locale: "it-IT"
+    is_active: true
+    benchmark_opt_in: true
+    quota_players: 200
+    quota_storage_gb: 100
+
+02-seasons:
+  - organization_slug: "demo-fc"
+    name: "2022-2023"
+    start_date: "2022-09-01"
+    end_date: "2023-06-30"
+    is_active: false
+
+  - organization_slug: "demo-fc"
+    name: "2023-2024"
+    start_date: "2023-09-01"
+    end_date: "2024-06-30"
+    is_active: false
+
+  - organization_slug: "demo-fc"
+    name: "2024-2025"
+    start_date: "2024-09-01"
+    end_date: "2025-06-30"
+    is_active: true
+
+03-teams:
+  - organization_slug: "demo-fc"
+    season_name: "2024-2025"
+    name: "Prima Squadra"
+    category: "Serie D"
+
+  - organization_slug: "demo-fc"
+    season_name: "2024-2025"
+    name: "Primavera"
+    category: "U19"
+
+  - organization_slug: "demo-fc"
+    season_name: "2024-2025"
+    name: "Giovanissimi"
+    category: "U17"
+
+  - organization_slug: "demo-fc"
+    season_name: "2024-2025"
+    name: "Allievi"
+    category: "U15"
+
+04-users:
+  - organization_slug: "demo-fc"
+    email: "admin@demo-fc.it"
+    full_name: "Giuseppe Verdi"
+    password: "admin123"
+    is_active: true
+    is_superuser: true
+
+  - organization_slug: "demo-fc"
+    email: "coach@demo-fc.it"
+    full_name: "Marco Rossi"
+    password: "coach123"
+    is_active: true
+    is_superuser: false
+
+  - organization_slug: "demo-fc"
+    email: "doctor@demo-fc.it"
+    full_name: "Laura Bianchi"
+    password: "doctor123"
+    is_active: true
+    is_superuser: false
+
+05-players:
+  # ==== PRIMA SQUADRA (Serie D) - 8 players ====
+  - external_id: "demo-fc-ps-1"
+    organization_slug: "demo-fc"
+    team_name: "Prima Squadra"
+    first_name: "Gianluigi"
+    last_name: "Donnarumma"
+    date_of_birth: "1999-02-25"
+    nationality: "IT"
+    role_primary: "GK"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 1
+    height_cm: 196
+    weight_kg: 90
+    is_active: true
+    is_minor: false
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 85
+    positioning: 88
+    decision_making: 82
+    work_rate: 70
+    mental_strength: 90
+    leadership: 85
+    concentration: 92
+    adaptability: 75
+
+  - external_id: "demo-fc-ps-19"
+    organization_slug: "demo-fc"
+    team_name: "Prima Squadra"
+    first_name: "Leonardo"
+    last_name: "Bonucci"
+    date_of_birth: "1987-05-01"
+    nationality: "IT"
+    role_primary: "DF"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 19
+    height_cm: 190
+    weight_kg: 85
+    is_active: true
+    is_minor: false
+    injury_prone: true
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 92
+    positioning: 90
+    decision_making: 88
+    work_rate: 75
+    mental_strength: 88
+    leadership: 95
+    concentration: 85
+    adaptability: 80
+
+  - external_id: "demo-fc-ps-3"
+    organization_slug: "demo-fc"
+    team_name: "Prima Squadra"
+    first_name: "Giorgio"
+    last_name: "Chiellini"
+    date_of_birth: "1984-08-14"
+    nationality: "IT"
+    role_primary: "DF"
+    dominant_foot: "LEFT"
+    dominant_arm: "LEFT"
+    jersey_number: 3
+    height_cm: 187
+    weight_kg: 83
+    is_active: true
+    is_minor: false
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 90
+    positioning: 92
+    decision_making: 86
+    work_rate: 80
+    mental_strength: 92
+    leadership: 98
+    concentration: 88
+    adaptability: 78
+
+  - external_id: "demo-fc-ps-23"
+    organization_slug: "demo-fc"
+    team_name: "Prima Squadra"
+    first_name: "Nicolò"
+    last_name: "Barella"
+    date_of_birth: "1997-02-07"
+    nationality: "IT"
+    role_primary: "MF"
+    role_secondary: "DF"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 23
+    height_cm: 175
+    weight_kg: 68
+    is_active: true
+    is_minor: false
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 88
+    positioning: 85
+    decision_making: 86
+    work_rate: 95
+    mental_strength: 82
+    leadership: 78
+    concentration: 85
+    adaptability: 88
+
+  - external_id: "demo-fc-ps-6"
+    organization_slug: "demo-fc"
+    team_name: "Prima Squadra"
+    first_name: "Marco"
+    last_name: "Verratti"
+    date_of_birth: "1992-11-05"
+    nationality: "IT"
+    role_primary: "MF"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 6
+    height_cm: 165
+    weight_kg: 60
+    is_active: true
+    is_minor: false
+    injury_prone: true
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 92
+    positioning: 88
+    decision_making: 90
+    work_rate: 85
+    mental_strength: 80
+    leadership: 75
+    concentration: 90
+    adaptability: 92
+
+  - external_id: "demo-fc-ps-10"
+    organization_slug: "demo-fc"
+    team_name: "Prima Squadra"
+    first_name: "Lorenzo"
+    last_name: "Insigne"
+    date_of_birth: "1991-06-04"
+    nationality: "IT"
+    role_primary: "FW"
+    role_secondary: "MF"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 10
+    height_cm: 163
+    weight_kg: 59
+    is_active: true
+    is_minor: false
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 85
+    positioning: 88
+    decision_making: 86
+    work_rate: 90
+    mental_strength: 82
+    leadership: 88
+    concentration: 85
+    adaptability: 86
+
+  - external_id: "demo-fc-ps-9"
+    organization_slug: "demo-fc"
+    team_name: "Prima Squadra"
+    first_name: "Ciro"
+    last_name: "Immobile"
+    date_of_birth: "1990-02-20"
+    nationality: "IT"
+    role_primary: "FW"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 9
+    height_cm: 185
+    weight_kg: 78
+    is_active: true
+    is_minor: false
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 82
+    positioning: 92
+    decision_making: 85
+    work_rate: 88
+    mental_strength: 85
+    leadership: 80
+    concentration: 88
+    adaptability: 80
+
+  - external_id: "demo-fc-ps-7"
+    organization_slug: "demo-fc"
+    team_name: "Prima Squadra"
+    first_name: "Federico"
+    last_name: "Chiesa"
+    date_of_birth: "1997-10-25"
+    nationality: "IT"
+    role_primary: "FW"
+    role_secondary: "MF"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 7
+    height_cm: 175
+    weight_kg: 70
+    is_active: true
+    is_minor: false
+    injury_prone: true
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 80
+    positioning: 82
+    decision_making: 78
+    work_rate: 92
+    mental_strength: 85
+    leadership: 72
+    concentration: 80
+    adaptability: 88
+
+  # ==== PRIMAVERA (U19) - 4 players ====
+  - external_id: "demo-fc-pv-1"
+    organization_slug: "demo-fc"
+    team_name: "Primavera"
+    first_name: "Tommaso"
+    last_name: "Mancini"
+    date_of_birth: "2007-04-12"
+    nationality: "IT"
+    role_primary: "GK"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 1
+    height_cm: 190
+    weight_kg: 78
+    is_active: true
+    is_minor: true
+    guardian_name: "Roberto Mancini"
+    guardian_email: "roberto.mancini@example.com"
+    guardian_phone: "+39 333 1111111"
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 65
+    positioning: 68
+    decision_making: 62
+    work_rate: 70
+    mental_strength: 60
+    leadership: 55
+    concentration: 75
+    adaptability: 65
+
+  - external_id: "demo-fc-pv-5"
+    organization_slug: "demo-fc"
+    team_name: "Primavera"
+    first_name: "Alessandro"
+    last_name: "Bastoni"
+    date_of_birth: "2007-09-18"
+    nationality: "IT"
+    role_primary: "DF"
+    dominant_foot: "LEFT"
+    dominant_arm: "LEFT"
+    jersey_number: 5
+    height_cm: 185
+    weight_kg: 75
+    is_active: true
+    is_minor: true
+    guardian_name: "Simona Bastoni"
+    guardian_email: "simona.bastoni@example.com"
+    guardian_phone: "+39 333 2222222"
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 70
+    positioning: 72
+    decision_making: 68
+    work_rate: 75
+    mental_strength: 65
+    leadership: 62
+    concentration: 70
+    adaptability: 72
+
+  - external_id: "demo-fc-pv-8"
+    organization_slug: "demo-fc"
+    team_name: "Primavera"
+    first_name: "Sandro"
+    last_name: "Tonali"
+    date_of_birth: "2008-01-20"
+    nationality: "IT"
+    role_primary: "MF"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 8
+    height_cm: 178
+    weight_kg: 70
+    is_active: true
+    is_minor: true
+    guardian_name: "Paolo Tonali"
+    guardian_email: "paolo.tonali@example.com"
+    guardian_phone: "+39 333 3333333"
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 75
+    positioning: 70
+    decision_making: 72
+    work_rate: 85
+    mental_strength: 68
+    leadership: 65
+    concentration: 75
+    adaptability: 78
+
+  - external_id: "demo-fc-pv-9"
+    organization_slug: "demo-fc"
+    team_name: "Primavera"
+    first_name: "Moise"
+    last_name: "Kean"
+    date_of_birth: "2008-06-15"
+    nationality: "IT"
+    role_primary: "FW"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 9
+    height_cm: 183
+    weight_kg: 75
+    is_active: true
+    is_minor: true
+    guardian_name: "Isabella Kean"
+    guardian_email: "isabella.kean@example.com"
+    guardian_phone: "+39 333 4444444"
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 65
+    positioning: 72
+    decision_making: 65
+    work_rate: 80
+    mental_strength: 70
+    leadership: 58
+    concentration: 68
+    adaptability: 75
+
+99-relations:
+  # Future: Player-team assignments across seasons
+  # Training session participants
+  # Match lineups

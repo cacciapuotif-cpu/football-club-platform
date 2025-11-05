@@ -1,194 +1,185 @@
-.PHONY: help preflight up down ps logs restart smoke clean migrate seed test fmt lint build
+# ============================================================================
+# Football Club Platform - Makefile
+# Professional Development & Deployment Commands
+# ============================================================================
 
-.DEFAULT_GOAL := help
+.PHONY: help
+help: ## Show this help message
+	@echo "Football Club Platform - Available Commands"
+	@echo "==========================================="
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-BLUE := \033[0;34m
-GREEN := \033[0;32m
-YELLOW := \033[0;33m
-RED := \033[0;31m
-NC := \033[0m
+# ============================================================================
+# DOCKER COMMANDS
+# ============================================================================
 
-help:
-	@echo "$(BLUE)============================================================$(NC)"
-	@echo "$(BLUE)  Football Club Platform - Makefile Commands$(NC)"
-	@echo "$(BLUE)============================================================$(NC)"
-	@echo ""
-	@echo "$(GREEN)Docker Stack:$(NC)"
-	@echo "  make preflight      - Verifica porte libere"
-	@echo "  make up             - Avvia stack (con preflight)"
-	@echo "  make down           - Ferma stack"
-	@echo "  make ps             - Stato containers"
-	@echo "  make logs           - Logs stack"
-	@echo "  make restart        - Restart stack"
-	@echo "  make smoke          - Smoke test endpoints"
-	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
+.PHONY: up
+up: ## Start all services
+	docker-compose up -d
 
-preflight: ## Verifica porte libere prima dell'avvio
-	@echo "$(BLUE)🔍 Preflight check...$(NC)"
-	@pwsh ./scripts/preflight-ports.ps1 || bash ./scripts/preflight-ports.sh
-
-up: preflight ## Start all services (con preflight)
-	@echo "$(BLUE)🐳 Avvio stack Football Club Platform...$(NC)"
-	docker compose up -d
-	@echo "$(GREEN)✅ Stack avviato$(NC)"
-	@echo "$(YELLOW)Backend:  http://localhost:8000/docs$(NC)"
-	@echo "$(YELLOW)Frontend: http://localhost:3001$(NC)"
-	@echo "$(YELLOW)MinIO:    http://localhost:9001 (console: 9002)$(NC)"
-	@echo "$(YELLOW)Ports - DB: 5433 | Redis: 6380$(NC)"
-
-up-prod: ## Start all services (prod profile)
-	@echo "$(BLUE)Starting production services...$(NC)"
-	docker compose -f infra/docker-compose.yml --profile prod up -d
-
-build: ## Build all Docker images
-	@echo "$(BLUE)🔨 Building images...$(NC)"
-	docker compose build
-
+.PHONY: down
 down: ## Stop all services
-	@echo "$(BLUE)🛑 Stopping services...$(NC)"
-	docker compose down
-	@echo "$(GREEN)✅ Stack fermato$(NC)"
+	docker-compose down
 
-ps: ## Show running containers
-	@echo "$(BLUE)📊 Stato containers:$(NC)"
-	docker compose ps
-
-logs: ## Show logs for all services
-	@echo "$(BLUE)📜 Logs stack (Ctrl+C per uscire):$(NC)"
-	docker compose logs -f --tail=200
-
-logs-backend: ## Show backend logs
-	docker compose logs -f backend
-
-logs-worker: ## Show worker logs
-	docker compose logs -f worker
-
-logs-frontend: ## Show frontend logs
-	docker compose logs -f frontend
-
+.PHONY: restart
 restart: down up ## Restart all services
 
-smoke: ## Smoke test API endpoints
-	@echo "$(BLUE)🧪 Smoke test API endpoints...$(NC)"
-	@node ./scripts/smoke.js || echo "$(RED)⚠️  Smoke test fallito - vedi log$(NC)"
+.PHONY: logs
+logs: ## View logs (use SERVICE=name for specific service)
+	docker-compose logs -f $(SERVICE)
 
-clean: down ## Stop services and remove volumes
-	@echo "$(RED)🧹 Removing volumes...$(NC)"
-	docker compose down -v
-	@echo "$(GREEN)✅ Cleanup complete$(NC)"
+.PHONY: ps
+ps: ## List running containers
+	docker-compose ps
 
-migrate: ## Run database migrations
-	@echo "$(BLUE)Running migrations...$(NC)"
-	docker compose -f infra/docker-compose.yml exec backend alembic upgrade head
-	@echo "$(GREEN)Migrations complete$(NC)"
+.PHONY: build
+build: ## Build all images
+	docker-compose build
 
-migration: ## Create a new migration (use: make migration MSG="your message")
-	@echo "$(BLUE)Creating migration...$(NC)"
-	docker compose -f infra/docker-compose.yml exec backend alembic revision --autogenerate -m "$(MSG)"
+# ============================================================================
+# DATABASE COMMANDS
+# ============================================================================
 
-downgrade: ## Rollback last migration
-	@echo "$(RED)Rolling back migration...$(NC)"
-	docker compose -f infra/docker-compose.yml exec backend alembic downgrade -1
+.PHONY: db-shell
+db-shell: ## Open PostgreSQL shell
+	docker exec -it football_club_platform_db psql -U app -d football_club_platform
 
-seed: ## Seed database with comprehensive demo data (idempotent)
-	@echo "$(BLUE)Seeding database with demo data...$(NC)"
-	docker compose -f infra/docker-compose.yml exec backend python /app/scripts/seed_demo.py
-	@echo "$(GREEN)Seed complete$(NC)"
+.PHONY: migrate
+migrate: ## Run Alembic migrations
+	docker exec football_club_platform_backend alembic upgrade head
 
-init-migration: ## Create initial Alembic migration (if none exist)
-	@echo "$(BLUE)Initializing Alembic migration...$(NC)"
-	bash scripts/init_alembic_migration.sh
-	@echo "$(GREEN)Migration initialization complete$(NC)"
+.PHONY: migrate-down
+migrate-down: ## Rollback one migration
+	docker exec football_club_platform_backend alembic downgrade -1
 
-db-backup: ## Backup database
-	@echo "$(BLUE)Backing up database...$(NC)"
-	bash scripts/backup_db.sh
+.PHONY: migrate-reset
+migrate-reset: ## Reset all migrations (WARNING: DESTRUCTIVE)
+	docker exec football_club_platform_backend alembic downgrade base
 
-db-restore: ## Restore database (use: make db-restore FILE=path/to/backup.sql)
-	@echo "$(BLUE)Restoring database...$(NC)"
-	bash scripts/restore_db.sh $(FILE)
+.PHONY: migration-create
+migration-create: ## Create new migration (use MSG="description")
+	docker exec football_club_platform_backend alembic revision --autogenerate -m "$(MSG)"
 
-shell-backend: ## Open shell in backend container
-	docker compose -f infra/docker-compose.yml exec backend /bin/bash
+# ============================================================================
+# SEEDING COMMANDS
+# ============================================================================
 
-shell-db: ## Open PostgreSQL shell
-	docker compose -f infra/docker-compose.yml exec db psql -U app -d football_dev
+.PHONY: seed
+seed: ## Seed database (DATASET=minimal|staging|demo, default: minimal)
+	@echo "🌱 Seeding database with dataset: $(or $(DATASET),minimal)"
+	DATASET=$(or $(DATASET),minimal) docker exec football_club_platform_backend python -m seeds.runner
 
-shell-redis: ## Open Redis CLI
-	docker compose -f infra/docker-compose.yml exec redis redis-cli
+.PHONY: seed-minimal
+seed-minimal: ## Seed with minimal dataset (CI/testing)
+	@$(MAKE) seed DATASET=minimal
 
-fmt: ## Format code (backend)
-	@echo "$(BLUE)Formatting code...$(NC)"
-	docker compose -f infra/docker-compose.yml exec backend black app/ ml/ scripts/
-	docker compose -f infra/docker-compose.yml exec backend isort app/ ml/ scripts/
-	@echo "$(GREEN)Formatting complete$(NC)"
+.PHONY: seed-staging
+seed-staging: ## Seed with staging dataset
+	@$(MAKE) seed DATASET=staging
 
-lint: ## Lint code (backend)
-	@echo "$(BLUE)Linting code...$(NC)"
-	docker compose -f infra/docker-compose.yml exec backend ruff check app/ ml/ scripts/
-	docker compose -f infra/docker-compose.yml exec backend mypy app/ ml/ scripts/ --ignore-missing-imports
+.PHONY: seed-demo
+seed-demo: ## Seed with demo dataset (rich data)
+	@$(MAKE) seed DATASET=demo
 
-test: ## Run backend tests
-	@echo "$(BLUE)Running tests...$(NC)"
-	docker compose -f infra/docker-compose.yml exec backend pytest tests/ -v --cov=app --cov-report=html
-	@echo "$(GREEN)Tests complete. Coverage: backend/htmlcov/index.html$(NC)"
+.PHONY: reseed
+reseed: migrate-reset migrate seed ## Full reseed: reset migrations + migrate + seed
+	@echo "✅ Database fully reseeded"
 
-test-watch: ## Run tests in watch mode
-	docker compose -f infra/docker-compose.yml exec backend pytest-watch tests/ -v
+.PHONY: reseed-minimal
+reseed-minimal: ## Reseed with minimal dataset
+	@$(MAKE) reseed DATASET=minimal
 
-ml-train: ## Train ML models
-	@echo "$(BLUE)Training ML models...$(NC)"
-	docker compose -f infra/docker-compose.yml exec backend python ml/train.py
-	@echo "$(GREEN)Training complete$(NC)"
+.PHONY: reseed-demo
+reseed-demo: ## Reseed with demo dataset
+	@$(MAKE) reseed DATASET=demo
 
-ml-health: ## Check ML model health
-	@echo "$(BLUE)Checking ML health...$(NC)"
-	curl -s http://localhost:8000/api/v1/ml/health | python -m json.tool
+# ============================================================================
+# TESTING COMMANDS
+# ============================================================================
 
-health: ## Check health of all services
-	@echo "$(BLUE)Checking service health...$(NC)"
-	@echo "Backend:"
-	@curl -s http://localhost:8000/healthz | python -m json.tool || echo "$(RED)Backend unhealthy$(NC)"
-	@echo "\nFrontend:"
-	@curl -s http://localhost:3000/api/health || echo "$(RED)Frontend unhealthy$(NC)"
+.PHONY: test
+test: ## Run tests
+	docker exec football_club_platform_backend pytest
 
-verify: ## Run comprehensive diagnostics and metrics verification
-	@echo "$(BLUE)Running comprehensive verification...$(NC)"
-	@bash scripts/collect_diagnostics.sh
-	@bash scripts/verify_metrics.sh
-	@echo "$(GREEN)Verification complete. Check artifacts/ directory.$(NC)"
+.PHONY: test-seeds
+test-seeds: ## Run seed tests
+	docker exec football_club_platform_backend pytest tests/test_seeds.py -v
 
-init: ## Initialize project (first time setup)
-	@echo "$(BLUE)Initializing project...$(NC)"
-	@if [ ! -f .env ]; then \
-		cp .env.example .env; \
-		echo "$(GREEN)Created .env file$(NC)"; \
+.PHONY: test-cov
+test-cov: ## Run tests with coverage
+	docker exec football_club_platform_backend pytest --cov=app --cov-report=html
+
+# ============================================================================
+# CODE QUALITY COMMANDS
+# ============================================================================
+
+.PHONY: lint
+lint: ## Run linters
+	docker exec football_club_platform_backend ruff check app
+
+.PHONY: format
+format: ## Format code
+	docker exec football_club_platform_backend ruff format app
+
+.PHONY: type-check
+type-check: ## Run type checking
+	docker exec football_club_platform_backend mypy app
+
+# ============================================================================
+# UTILITY COMMANDS
+# ============================================================================
+
+.PHONY: shell
+shell: ## Open backend shell
+	docker exec -it football_club_platform_backend bash
+
+.PHONY: clean
+clean: ## Clean temporary files and caches
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
+	find . -type d -name ".pytest_cache" -exec rm -rf {} +
+	find . -type d -name ".mypy_cache" -exec rm -rf {} +
+
+.PHONY: prune
+prune: ## Prune Docker system (WARNING: removes unused data)
+	docker system prune -af --volumes
+
+# ============================================================================
+# PORT VALIDATION
+# ============================================================================
+
+.PHONY: check-ports
+check-ports: ## Verify port configuration (ensures no conflict with pythonpro)
+	@echo "Checking port configuration..."
+	@if [ "$(FCP_WEB_PORT)" = "3001" ]; then \
+		echo "❌ ERROR: FCP_WEB_PORT=3001 is RESERVED for pythonpro!"; \
+		exit 1; \
 	fi
-	@echo "$(BLUE)Building images...$(NC)"
-	docker compose -f infra/docker-compose.yml build
-	@echo "$(BLUE)Starting services...$(NC)"
-	docker compose -f infra/docker-compose.yml --profile dev up -d
-	@echo "$(BLUE)Waiting for database...$(NC)"
-	sleep 10
-	@echo "$(BLUE)Initializing migrations...$(NC)"
-	bash scripts/init_alembic_migration.sh || true
-	@echo "$(BLUE)Running migrations...$(NC)"
-	docker compose -f infra/docker-compose.yml exec backend alembic upgrade head
-	@echo "$(BLUE)Seeding database with demo data...$(NC)"
-	docker compose -f infra/docker-compose.yml exec backend python /app/scripts/seed_demo.py
-	@echo "$(GREEN)✓ Initialization complete!$(NC)"
-	@echo "$(GREEN)Backend API: http://localhost:8000/docs$(NC)"
-	@echo "$(GREEN)Frontend:    http://localhost:3000$(NC)"
+	@echo "✅ Port configuration OK"
+	@echo "   FCP_WEB_PORT: $(or $(FCP_WEB_PORT),3000)"
+	@echo "   FCP_API_PORT: $(or $(FCP_API_PORT),8000)"
+	@echo "   FCP_DB_PORT: $(or $(FCP_DB_PORT),5434)"
+	@echo "   FCP_REDIS_PORT: $(or $(FCP_REDIS_PORT),6381)"
 
-reset: clean init ## Full reset (clean + init)
+# ============================================================================
+# QUICKSTART
+# ============================================================================
 
-check-docker: ## Verify Docker Desktop setup
-	@echo "$(BLUE)Checking Docker Desktop...$(NC)"
-	@docker info > /dev/null 2>&1 && echo "$(GREEN)✓ Docker is running$(NC)" || (echo "$(RED)✗ Docker is not running$(NC)" && exit 1)
-	@docker compose version > /dev/null 2>&1 && echo "$(GREEN)✓ Docker Compose available$(NC)" || (echo "$(RED)✗ Docker Compose not found$(NC)" && exit 1)
-	@echo "$(GREEN)Docker Desktop is properly configured$(NC)"
+.PHONY: quickstart
+quickstart: check-ports up migrate seed-minimal ## Quickstart: up + migrate + seed minimal
+	@echo "🎉 Football Club Platform is ready!"
+	@echo "   Frontend: http://localhost:$(or $(FCP_WEB_PORT),3000)"
+	@echo "   Backend API: http://localhost:$(or $(FCP_API_PORT),8000)"
+	@echo "   API Docs: http://localhost:$(or $(FCP_API_PORT),8000)/docs"
 
-check-resources: ## Show Docker Desktop resource usage
-	@echo "$(BLUE)Docker resource usage:$(NC)"
-	@docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}"
+# ============================================================================
+# WINDOWS-SPECIFIC COMMANDS (PowerShell)
+# ============================================================================
+
+.PHONY: quickstart-win
+quickstart-win: ## Quickstart for Windows
+	@powershell -Command "docker-compose up -d"
+	@powershell -Command "Start-Sleep -Seconds 10"
+	@powershell -Command "docker exec football_club_platform_backend alembic upgrade head"
+	@powershell -Command "docker exec football_club_platform_backend python -m seeds.runner"
+	@echo "🎉 Football Club Platform is ready on Windows!"

@@ -1,0 +1,184 @@
+# ============================================================================
+# STAGING DATASET - Football Club Platform
+# For staging environment and integration testing
+# ============================================================================
+
+01-organizations:
+  - slug: "staging-fc"
+    name: "Staging Football Club"
+    country: "IT"
+    email: "staging@staging-fc.test"
+    phone: "+39 02 12345678"
+    address: "Via dello Stadio, 1"
+    city: "Milano"
+    timezone: "Europe/Rome"
+    locale: "it-IT"
+    is_active: true
+    benchmark_opt_in: true
+    quota_players: 100
+    quota_storage_gb: 50
+
+02-seasons:
+  - organization_slug: "staging-fc"
+    name: "2023-2024"
+    start_date: "2023-09-01"
+    end_date: "2024-06-30"
+    is_active: false
+
+  - organization_slug: "staging-fc"
+    name: "2024-2025"
+    start_date: "2024-09-01"
+    end_date: "2025-06-30"
+    is_active: true
+
+03-teams:
+  - organization_slug: "staging-fc"
+    season_name: "2024-2025"
+    name: "Prima Squadra"
+    category: "Serie C"
+
+  - organization_slug: "staging-fc"
+    season_name: "2024-2025"
+    name: "Primavera"
+    category: "U19"
+
+  - organization_slug: "staging-fc"
+    season_name: "2024-2025"
+    name: "Giovanissimi"
+    category: "U17"
+
+04-users:
+  - organization_slug: "staging-fc"
+    email: "admin@staging-fc.test"
+    full_name: "Admin Staging"
+    password: "admin123"
+    is_active: true
+    is_superuser: true
+
+  - organization_slug: "staging-fc"
+    email: "coach@staging-fc.test"
+    full_name: "Coach Staging"
+    password: "coach123"
+    is_active: true
+    is_superuser: false
+
+05-players:
+  # Prima Squadra players
+  - external_id: "staging-fc-ps-1"
+    organization_slug: "staging-fc"
+    team_name: "Prima Squadra"
+    first_name: "Alessandro"
+    last_name: "Ferrari"
+    date_of_birth: "2001-01-15"
+    nationality: "IT"
+    role_primary: "GK"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 1
+    height_cm: 188
+    weight_kg: 82
+    is_active: true
+    is_minor: false
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 70
+    positioning: 75
+    decision_making: 68
+    work_rate: 60
+    mental_strength: 72
+    leadership: 65
+    concentration: 80
+    adaptability: 60
+
+  - external_id: "staging-fc-ps-4"
+    organization_slug: "staging-fc"
+    team_name: "Prima Squadra"
+    first_name: "Matteo"
+    last_name: "Colombo"
+    date_of_birth: "2000-05-20"
+    nationality: "IT"
+    role_primary: "DF"
+    role_secondary: "MF"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 4
+    height_cm: 182
+    weight_kg: 76
+    is_active: true
+    is_minor: false
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 75
+    positioning: 78
+    decision_making: 72
+    work_rate: 80
+    mental_strength: 70
+    leadership: 75
+    concentration: 75
+    adaptability: 68
+
+  # Primavera players
+  - external_id: "staging-fc-pv-9"
+    organization_slug: "staging-fc"
+    team_name: "Primavera"
+    first_name: "Lorenzo"
+    last_name: "Romano"
+    date_of_birth: "2007-09-12"
+    nationality: "IT"
+    role_primary: "FW"
+    dominant_foot: "LEFT"
+    dominant_arm: "LEFT"
+    jersey_number: 9
+    height_cm: 178
+    weight_kg: 72
+    is_active: true
+    is_minor: true
+    guardian_name: "Maria Romano"
+    guardian_email: "maria.romano@example.com"
+    guardian_phone: "+39 333 1234567"
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 60
+    positioning: 65
+    decision_making: 62
+    work_rate: 75
+    mental_strength: 58
+    leadership: 50
+    concentration: 60
+    adaptability: 70
+
+  - external_id: "staging-fc-pv-8"
+    organization_slug: "staging-fc"
+    team_name: "Primavera"
+    first_name: "Davide"
+    last_name: "Ricci"
+    date_of_birth: "2008-03-08"
+    nationality: "IT"
+    role_primary: "MF"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 8
+    height_cm: 175
+    weight_kg: 68
+    is_active: true
+    is_minor: true
+    guardian_name: "Giuseppe Ricci"
+    guardian_email: "giuseppe.ricci@example.com"
+    guardian_phone: "+39 333 7654321"
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 65
+    positioning: 62
+    decision_making: 68
+    work_rate: 72
+    mental_strength: 60
+    leadership: 55
+    concentration: 65
+    adaptability: 68
+
+99-relations:
+  # Future: N-N relationships

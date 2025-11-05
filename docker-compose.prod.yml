@@ -92,7 +92,10 @@ services:
   # MLFLOW
   # ====================
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.10.2
+    build:
+      context: ./infra/mlflow
+      dockerfile: Dockerfile
+    image: football-club-platform-mlflow:latest
     container_name: football_club_platform_mlflow
     ports:
       - "5000:5000"
@@ -103,7 +106,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-minioadmin123}
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
     command: >
-      mlflow server
+      server
       --host 0.0.0.0
       --port 5000
       --backend-store-uri postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-football_club_platform}
@@ -151,7 +154,7 @@ services:
     image: grafana/grafana:10.2.3
     container_name: football_club_platform_grafana
     ports:
-      - "3001:3000"
+      - "3003:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}

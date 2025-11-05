@@ -33,14 +33,17 @@ class Settings(BaseSettings):
     JWT_REFRESH_EXPIRES_DAYS: int = 7
     BCRYPT_ROUNDS: int = 12
 
-    # CORS
-    ALLOWED_ORIGINS: str = "http://localhost:3101"
+    # CORS Configuration
+    # IMPORTANT: Port 3001 is RESERVED for pythonpro - DO NOT USE
+    # Frontend should use port 3000 (FCP_WEB_PORT=3000)
+    ALLOWED_ORIGINS: str = "http://localhost:3000"
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_MAX_AGE: int = 3600
 
     @field_validator("ALLOWED_ORIGINS")
     @classmethod
     def parse_origins(cls, v: str) -> list[str]:
+        """Parse comma-separated list of allowed origins for CORS."""
         return [origin.strip() for origin in v.split(",")]
 
     # Database

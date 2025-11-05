@@ -1,0 +1,93 @@
+# ============================================================================
+# MINIMAL DATASET - Football Club Platform
+# For CI/CD, quick testing, and development
+# ============================================================================
+
+01-organizations:
+  - slug: "minimal-fc"
+    name: "Minimal FC"
+    country: "IT"
+    email: "info@minimal-fc.test"
+    timezone: "Europe/Rome"
+    locale: "it-IT"
+    is_active: true
+    benchmark_opt_in: false
+    quota_players: 50
+    quota_storage_gb: 10
+
+02-seasons:
+  - organization_slug: "minimal-fc"
+    name: "2024-2025"
+    start_date: "2024-09-01"
+    end_date: "2025-06-30"
+    is_active: true
+
+03-teams:
+  - organization_slug: "minimal-fc"
+    season_name: "2024-2025"
+    name: "Prima Squadra"
+    category: "U19"
+
+04-users:
+  - organization_slug: "minimal-fc"
+    email: "admin@minimal-fc.test"
+    full_name: "Admin User"
+    password: "admin123"  # Only for testing, hashed in seed
+    is_active: true
+    is_superuser: true
+
+05-players:
+  - external_id: "minimal-fc-ps-10"
+    organization_slug: "minimal-fc"
+    team_name: "Prima Squadra"
+    first_name: "Marco"
+    last_name: "Rossi"
+    date_of_birth: "2008-05-15"
+    nationality: "IT"
+    role_primary: "FW"
+    dominant_foot: "RIGHT"
+    dominant_arm: "RIGHT"
+    jersey_number: 10
+    is_active: true
+    is_minor: false
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    # Tactical/mental (default values)
+    tactical_awareness: 50
+    positioning: 50
+    decision_making: 50
+    work_rate: 50
+    mental_strength: 50
+    leadership: 50
+    concentration: 50
+    adaptability: 50
+
+  - external_id: "minimal-fc-ps-8"
+    organization_slug: "minimal-fc"
+    team_name: "Prima Squadra"
+    first_name: "Luca"
+    last_name: "Bianchi"
+    date_of_birth: "2009-03-22"
+    nationality: "IT"
+    role_primary: "MF"
+    dominant_foot: "LEFT"
+    dominant_arm: "LEFT"
+    jersey_number: 8
+    is_active: true
+    is_minor: false
+    injury_prone: false
+    consent_given: true
+    medical_clearance: true
+    tactical_awareness: 50
+    positioning: 50
+    decision_making: 50
+    work_rate: 50
+    mental_strength: 50
+    leadership: 50
+    concentration: 50
+    adaptability: 50
+
+99-relations:
+  # Future: N-N relationships, late FK bindings
+  # Currently empty for minimal dataset

@@ -10,9 +10,9 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-      POSTGRES_DB: ${POSTGRES_DB:-football_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-football_club_platform}
     ports:
-      - "${POSTGRES_PORT:-5433}:5432"
+      - "${FCP_DB_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -32,7 +32,7 @@ services:
     image: redis:7-alpine
     container_name: football_club_platform_redis
     ports:
-      - "${REDIS_PORT:-6380}:6379"
+      - "${FCP_REDIS_PORT:-6381}:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
@@ -82,7 +82,7 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       DEBUG: ${DEBUG:-true}
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-football_dev}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-football_club_platform}
       REDIS_URL: redis://redis:6379/0
       STORAGE_BACKEND: s3
       S3_ENDPOINT_URL: http://minio:9000
@@ -90,9 +90,9 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3101}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
     ports:
-      - "${BACKEND_PORT:-8101}:8000"
+      - "${FCP_API_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
       - backend_storage:/data/storage
@@ -125,7 +125,7 @@ services:
     container_name: football_club_platform_worker
     environment:
       APP_ENV: ${APP_ENV:-development}
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-football_dev}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-football_club_platform}
       REDIS_URL: redis://redis:6379/0
       STORAGE_BACKEND: s3
       S3_ENDPOINT_URL: http://minio:9000
@@ -147,16 +147,17 @@ services:
       - "com.role=worker"
 
   # === FRONTEND (Next.js) ===
+  # IMPORTANT: DO NOT USE PORT 3001 - Reserved for pythonpro
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: football_club_platform_frontend
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8101}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       NEXT_PUBLIC_APP_NAME: "Football Club Platform"
     ports:
-      - "${FRONTEND_PORT:-3101}:3000"
+      - "${FCP_WEB_PORT:-3000}:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules

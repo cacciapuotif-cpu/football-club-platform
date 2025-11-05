@@ -6,13 +6,13 @@ from typing import Dict
 
 from app.db_sync import get_db
 from app.models.analytics import PlayerMatchStat, PlayerPrediction
-from app.schemas.ml_analytics import PlayerSummary
+from app.schemas.ml_analytics import PlayerMLSummary
 from app.services.ml_analytics_service import train_all, predict_for_player
 
 router = APIRouter(prefix="/analytics", tags=["ML Analytics"])
 
 
-@router.get("/player/{player_id}/summary", response_model=PlayerSummary)
+@router.get("/player/{player_id}/summary", response_model=PlayerMLSummary)
 def player_summary(player_id: str, db: Session = Depends(get_db)):
     """Get player ML summary based on recent match stats."""
     stats = (
@@ -24,7 +24,7 @@ def player_summary(player_id: str, db: Session = Depends(get_db)):
     )
 
     if not stats:
-        return PlayerSummary(
+        return PlayerMLSummary(
             player_id=player_id,
             last_10_matches=0,
             avg_xg=0.0,
@@ -44,7 +44,7 @@ def player_summary(player_id: str, db: Session = Depends(get_db)):
     m2 = (sum((s.xg or 0) for s in last5) / len(last5)) if last5 else 0
     trend = m2 - m1
 
-    return PlayerSummary(
+    return PlayerMLSummary(
         player_id=player_id,
         last_10_matches=len(stats),
         avg_xg=avg_xg,

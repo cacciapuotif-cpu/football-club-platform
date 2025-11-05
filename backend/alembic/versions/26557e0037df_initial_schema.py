@@ -1,8 +1,8 @@
-"""Initial schema
+"""initial_schema
 
-Revision ID: 66a6bcbaa092
+Revision ID: 26557e0037df
 Revises: 
-Create Date: 2025-10-20 12:20:22.978659
+Create Date: 2025-11-04 15:15:42.421276
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlmodel
 
 
 # revision identifiers, used by Alembic.
-revision = '66a6bcbaa092'
+revision = '26557e0037df'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -33,8 +33,6 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_benchmark_data_age_group'), 'benchmark_data', ['age_group'], unique=False)
-    op.create_index(op.f('ix_benchmark_data_role'), 'benchmark_data', ['role'], unique=False)
     op.create_table('drift_metrics',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('model_version', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -52,32 +50,6 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_table('matches',
-    sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
-    sa.Column('match_date', sa.DateTime(), nullable=False),
-    sa.Column('match_type', sa.Enum('LEAGUE', 'CUP', 'FRIENDLY', 'TRAINING_MATCH', name='matchtype'), nullable=False),
-    sa.Column('team_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
-    sa.Column('opponent_name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('is_home', sa.Boolean(), nullable=False),
-    sa.Column('goals_for', sa.Integer(), nullable=True),
-    sa.Column('goals_against', sa.Integer(), nullable=True),
-    sa.Column('result', sa.Enum('WIN', 'DRAW', 'LOSS', 'NOT_PLAYED', name='matchresult'), nullable=False),
-    sa.Column('venue', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('weather', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('temperature_c', sa.Float(), nullable=True),
-    sa.Column('video_id', sqlmodel.sql.sqltypes.GUID(), nullable=True),
-    sa.Column('notes', sa.Text(), nullable=True),
-    sa.Column('organization_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ),
-    sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ),
-    sa.ForeignKeyConstraint(['video_id'], ['videos.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_matches_organization_id'), 'matches', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_matches_team_id'), 'matches', ['team_id'], unique=False)
-    op.create_index(op.f('ix_matches_video_id'), 'matches', ['video_id'], unique=False)
     op.create_table('ml_model_versions',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('version', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -122,16 +94,40 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_organizations_name'), 'organizations', ['name'], unique=False)
-    op.create_index(op.f('ix_organizations_slug'), 'organizations', ['slug'], unique=True)
+    op.create_table('seasons',
+    sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
+    sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('start_date', sa.Date(), nullable=False),
+    sa.Column('end_date', sa.Date(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('organization_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('teams',
+    sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
+    sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('category', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('season_id', sqlmodel.sql.sqltypes.GUID(), nullable=True),
+    sa.Column('organization_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ),
+    sa.ForeignKeyConstraint(['season_id'], ['seasons.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('training_sessions',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('session_date', sa.DateTime(), nullable=False),
-    sa.Column('session_type', sa.Enum('TRAINING', 'FRIENDLY', 'RECOVERY', 'GYM', 'TACTICAL', name='sessiontype'), nullable=False),
+    sa.Column('session_type', sa.Enum('TRAINING', 'TECHNICAL', 'TACTICAL', 'PHYSICAL', 'PSYCHOLOGICAL', 'FRIENDLY', 'RECOVERY', 'GYM', name='sessiontype'), nullable=False),
     sa.Column('duration_min', sa.Integer(), nullable=False),
     sa.Column('team_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('focus', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('focus_area', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('coach_notes', sa.Text(), nullable=True),
+    sa.Column('intensity', sa.Enum('LOW', 'MEDIUM', 'HIGH', name='sessionintensity'), nullable=True),
     sa.Column('planned_intensity', sa.Integer(), nullable=True),
     sa.Column('actual_intensity_avg', sa.Float(), nullable=True),
     sa.Column('video_id', sqlmodel.sql.sqltypes.GUID(), nullable=True),
@@ -151,9 +147,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['video_id'], ['videos.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_training_sessions_organization_id'), 'training_sessions', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_training_sessions_team_id'), 'training_sessions', ['team_id'], unique=False)
-    op.create_index(op.f('ix_training_sessions_video_id'), 'training_sessions', ['video_id'], unique=False)
     op.create_table('videos',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('filename', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -182,35 +175,29 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['session_id'], ['training_sessions.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_videos_match_id'), 'videos', ['match_id'], unique=False)
-    op.create_index(op.f('ix_videos_organization_id'), 'videos', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_videos_session_id'), 'videos', ['session_id'], unique=False)
-    op.create_table('seasons',
+    op.create_table('matches',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
-    sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('start_date', sa.Date(), nullable=False),
-    sa.Column('end_date', sa.Date(), nullable=False),
-    sa.Column('is_active', sa.Boolean(), nullable=False),
-    sa.Column('organization_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_seasons_organization_id'), 'seasons', ['organization_id'], unique=False)
-    op.create_table('teams',
-    sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
-    sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('category', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('season_id', sqlmodel.sql.sqltypes.GUID(), nullable=True),
+    sa.Column('match_date', sa.DateTime(), nullable=False),
+    sa.Column('match_type', sa.Enum('LEAGUE', 'CUP', 'FRIENDLY', 'TRAINING_MATCH', name='matchtype'), nullable=False),
+    sa.Column('team_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
+    sa.Column('opponent_name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('is_home', sa.Boolean(), nullable=False),
+    sa.Column('goals_for', sa.Integer(), nullable=True),
+    sa.Column('goals_against', sa.Integer(), nullable=True),
+    sa.Column('result', sa.Enum('WIN', 'DRAW', 'LOSS', 'NOT_PLAYED', name='matchresult'), nullable=False),
+    sa.Column('venue', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('weather', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('temperature_c', sa.Float(), nullable=True),
+    sa.Column('video_id', sqlmodel.sql.sqltypes.GUID(), nullable=True),
+    sa.Column('notes', sa.Text(), nullable=True),
     sa.Column('organization_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ),
-    sa.ForeignKeyConstraint(['season_id'], ['seasons.id'], ),
+    sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ),
+    sa.ForeignKeyConstraint(['video_id'], ['videos.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_teams_organization_id'), 'teams', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_teams_season_id'), 'teams', ['season_id'], unique=False)
     op.create_table('players',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('first_name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -236,12 +223,27 @@ def upgrade() -> None:
     sa.Column('bmi', sa.Float(), nullable=True),
     sa.Column('body_fat_pct', sa.Float(), nullable=True),
     sa.Column('lean_mass_kg', sa.Float(), nullable=True),
+    sa.Column('physical_condition', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('injury_prone', sa.Boolean(), nullable=False),
+    sa.Column('tactical_awareness', sa.Integer(), nullable=False),
+    sa.Column('positioning', sa.Integer(), nullable=False),
+    sa.Column('decision_making', sa.Integer(), nullable=False),
+    sa.Column('work_rate', sa.Integer(), nullable=False),
+    sa.Column('mental_strength', sa.Integer(), nullable=False),
+    sa.Column('leadership', sa.Integer(), nullable=False),
+    sa.Column('concentration', sa.Integer(), nullable=False),
+    sa.Column('adaptability', sa.Integer(), nullable=False),
+    sa.Column('market_value_eur', sa.Float(), nullable=True),
+    sa.Column('contract_expiry_date', sa.Date(), nullable=True),
     sa.Column('consent_given', sa.Boolean(), nullable=False),
     sa.Column('consent_date', sa.DateTime(), nullable=True),
     sa.Column('consent_parent_given', sa.Boolean(), nullable=True),
     sa.Column('data_retention_until', sa.Date(), nullable=True),
     sa.Column('medical_clearance', sa.Boolean(), nullable=False),
     sa.Column('medical_clearance_expiry', sa.Date(), nullable=True),
+    sa.Column('overall_rating', sa.Float(), nullable=True),
+    sa.Column('potential_rating', sa.Float(), nullable=True),
+    sa.Column('form_level', sa.Float(), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('is_injured', sa.Boolean(), nullable=False),
     sa.Column('notes', sa.Text(), nullable=True),
@@ -253,8 +255,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_players_organization_id'), 'players', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_players_team_id'), 'players', ['team_id'], unique=False)
     op.create_table('attendances',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('match_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -275,9 +275,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_attendances_match_id'), 'attendances', ['match_id'], unique=False)
-    op.create_index(op.f('ix_attendances_organization_id'), 'attendances', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_attendances_player_id'), 'attendances', ['player_id'], unique=False)
     op.create_table('daily_readiness',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -311,8 +308,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_daily_readiness_organization_id'), 'daily_readiness', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_daily_readiness_player_id'), 'daily_readiness', ['player_id'], unique=False)
     op.create_table('health_monitoring',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -332,8 +327,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_health_monitoring_organization_id'), 'health_monitoring', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_health_monitoring_player_id'), 'health_monitoring', ['player_id'], unique=False)
     op.create_table('injuries',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -366,8 +359,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['session_id'], ['training_sessions.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_injuries_organization_id'), 'injuries', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_injuries_player_id'), 'injuries', ['player_id'], unique=False)
     op.create_table('match_player_stats',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -425,9 +416,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_match_player_stats_match_id'), 'match_player_stats', ['match_id'], unique=False)
-    op.create_index(op.f('ix_match_player_stats_organization_id'), 'match_player_stats', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_match_player_stats_player_id'), 'match_player_stats', ['player_id'], unique=False)
     op.create_table('ml_predictions',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -451,8 +439,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_ml_predictions_organization_id'), 'ml_predictions', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_ml_predictions_player_id'), 'ml_predictions', ['player_id'], unique=False)
     op.create_table('performance_snapshots',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -484,8 +470,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_performance_snapshots_organization_id'), 'performance_snapshots', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_performance_snapshots_player_id'), 'performance_snapshots', ['player_id'], unique=False)
     op.create_table('physical_tests',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('test_date', sa.Date(), nullable=False),
@@ -520,8 +504,126 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_physical_tests_organization_id'), 'physical_tests', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_physical_tests_player_id'), 'physical_tests', ['player_id'], unique=False)
+    op.create_table('player_stats',
+    sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
+    sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
+    sa.Column('match_id', sqlmodel.sql.sqltypes.GUID(), nullable=True),
+    sa.Column('session_id', sqlmodel.sql.sqltypes.GUID(), nullable=True),
+    sa.Column('season', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('date', sa.Date(), nullable=False),
+    sa.Column('minutes_played', sa.Integer(), nullable=False),
+    sa.Column('goals', sa.Integer(), nullable=False),
+    sa.Column('assists', sa.Integer(), nullable=False),
+    sa.Column('shots', sa.Integer(), nullable=False),
+    sa.Column('shots_on_target', sa.Integer(), nullable=False),
+    sa.Column('dribbles_attempted', sa.Integer(), nullable=False),
+    sa.Column('dribbles_success', sa.Integer(), nullable=False),
+    sa.Column('offsides', sa.Integer(), nullable=False),
+    sa.Column('penalties_scored', sa.Integer(), nullable=False),
+    sa.Column('penalties_missed', sa.Integer(), nullable=False),
+    sa.Column('passes_attempted', sa.Integer(), nullable=False),
+    sa.Column('passes_completed', sa.Integer(), nullable=False),
+    sa.Column('key_passes', sa.Integer(), nullable=False),
+    sa.Column('through_balls', sa.Integer(), nullable=False),
+    sa.Column('crosses', sa.Integer(), nullable=False),
+    sa.Column('cross_accuracy_pct', sa.Float(), nullable=False),
+    sa.Column('long_balls', sa.Integer(), nullable=False),
+    sa.Column('long_balls_completed', sa.Integer(), nullable=False),
+    sa.Column('tackles_attempted', sa.Integer(), nullable=False),
+    sa.Column('tackles_success', sa.Integer(), nullable=False),
+    sa.Column('interceptions', sa.Integer(), nullable=False),
+    sa.Column('clearances', sa.Integer(), nullable=False),
+    sa.Column('blocks', sa.Integer(), nullable=False),
+    sa.Column('aerial_duels_won', sa.Integer(), nullable=False),
+    sa.Column('aerial_duels_lost', sa.Integer(), nullable=False),
+    sa.Column('duels_won', sa.Integer(), nullable=False),
+    sa.Column('duels_lost', sa.Integer(), nullable=False),
+    sa.Column('saves', sa.Integer(), nullable=False),
+    sa.Column('saves_from_inside_box', sa.Integer(), nullable=False),
+    sa.Column('punches', sa.Integer(), nullable=False),
+    sa.Column('high_claims', sa.Integer(), nullable=False),
+    sa.Column('catches', sa.Integer(), nullable=False),
+    sa.Column('sweeper_clearances', sa.Integer(), nullable=False),
+    sa.Column('throw_outs', sa.Integer(), nullable=False),
+    sa.Column('goal_kicks', sa.Integer(), nullable=False),
+    sa.Column('distance_covered_m', sa.Integer(), nullable=False),
+    sa.Column('sprints', sa.Integer(), nullable=False),
+    sa.Column('top_speed_kmh', sa.Float(), nullable=False),
+    sa.Column('fouls_committed', sa.Integer(), nullable=False),
+    sa.Column('fouls_suffered', sa.Integer(), nullable=False),
+    sa.Column('yellow_cards', sa.Integer(), nullable=False),
+    sa.Column('red_cards', sa.Integer(), nullable=False),
+    sa.Column('performance_index', sa.Float(), nullable=False),
+    sa.Column('influence_score', sa.Float(), nullable=False),
+    sa.Column('expected_goals_xg', sa.Float(), nullable=False),
+    sa.Column('expected_assists_xa', sa.Float(), nullable=False),
+    sa.Column('pass_accuracy_pct', sa.Float(), nullable=False),
+    sa.Column('shot_accuracy_pct', sa.Float(), nullable=False),
+    sa.Column('tackle_success_pct', sa.Float(), nullable=False),
+    sa.Column('dribble_success_pct', sa.Float(), nullable=False),
+    sa.Column('aerial_duel_success_pct', sa.Float(), nullable=False),
+    sa.Column('is_starter', sa.Boolean(), nullable=False),
+    sa.Column('substituted_in_minute', sa.Integer(), nullable=True),
+    sa.Column('substituted_out_minute', sa.Integer(), nullable=True),
+    sa.Column('organization_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['match_id'], ['matches.id'], ),
+    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ),
+    sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
+    sa.ForeignKeyConstraint(['session_id'], ['training_sessions.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('player_training_stats',
+    sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
+    sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
+    sa.Column('training_session_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
+    sa.Column('attendance', sa.Boolean(), nullable=False),
+    sa.Column('participation_pct', sa.Float(), nullable=False),
+    sa.Column('late_arrival_min', sa.Integer(), nullable=False),
+    sa.Column('technical_rating', sa.Integer(), nullable=False),
+    sa.Column('tactical_execution', sa.Integer(), nullable=False),
+    sa.Column('physical_performance', sa.Integer(), nullable=False),
+    sa.Column('mental_focus', sa.Integer(), nullable=False),
+    sa.Column('passing_accuracy', sa.Float(), nullable=False),
+    sa.Column('shooting_accuracy', sa.Float(), nullable=False),
+    sa.Column('dribbling_success', sa.Float(), nullable=False),
+    sa.Column('first_touch_quality', sa.Float(), nullable=False),
+    sa.Column('defensive_actions', sa.Integer(), nullable=False),
+    sa.Column('speed_kmh', sa.Float(), nullable=True),
+    sa.Column('endurance_index', sa.Float(), nullable=True),
+    sa.Column('recovery_rate', sa.Float(), nullable=True),
+    sa.Column('distance_covered_m', sa.Float(), nullable=True),
+    sa.Column('hi_intensity_runs', sa.Integer(), nullable=True),
+    sa.Column('sprints_count', sa.Integer(), nullable=True),
+    sa.Column('aerobic_capacity', sa.Float(), nullable=True),
+    sa.Column('power_output', sa.Float(), nullable=True),
+    sa.Column('agility_score', sa.Float(), nullable=True),
+    sa.Column('strength_score', sa.Float(), nullable=True),
+    sa.Column('rpe_score', sa.Integer(), nullable=True),
+    sa.Column('fatigue_level', sa.Integer(), nullable=True),
+    sa.Column('muscle_soreness', sa.Integer(), nullable=True),
+    sa.Column('sleep_quality', sa.Integer(), nullable=True),
+    sa.Column('hydration_level', sa.Integer(), nullable=True),
+    sa.Column('coach_feedback', sa.Text(), nullable=True),
+    sa.Column('areas_to_improve', sa.Text(), nullable=True),
+    sa.Column('positive_notes', sa.Text(), nullable=True),
+    sa.Column('attitude_rating', sa.Integer(), nullable=False),
+    sa.Column('teamwork_rating', sa.Integer(), nullable=False),
+    sa.Column('injury_concern', sa.Boolean(), nullable=False),
+    sa.Column('injury_notes', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('recommended_rest', sa.Boolean(), nullable=False),
+    sa.Column('training_load_score', sa.Float(), nullable=True),
+    sa.Column('performance_trend', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('predicted_match_readiness', sa.Float(), nullable=True),
+    sa.Column('organization_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ),
+    sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
+    sa.ForeignKeyConstraint(['training_session_id'], ['training_sessions.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('psychological_profile',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -539,8 +641,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_psychological_profile_organization_id'), 'psychological_profile', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_psychological_profile_player_id'), 'psychological_profile', ['player_id'], unique=False)
     op.create_table('sensor_data',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -573,10 +673,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['session_id'], ['training_sessions.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_sensor_data_match_id'), 'sensor_data', ['match_id'], unique=False)
-    op.create_index(op.f('ix_sensor_data_organization_id'), 'sensor_data', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_sensor_data_player_id'), 'sensor_data', ['player_id'], unique=False)
-    op.create_index(op.f('ix_sensor_data_session_id'), 'sensor_data', ['session_id'], unique=False)
     op.create_table('tactical_cognitive',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -595,8 +691,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_tactical_cognitive_organization_id'), 'tactical_cognitive', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_tactical_cognitive_player_id'), 'tactical_cognitive', ['player_id'], unique=False)
     op.create_table('tactical_tests',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('test_date', sa.Date(), nullable=False),
@@ -620,8 +714,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_tactical_tests_organization_id'), 'tactical_tests', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_tactical_tests_player_id'), 'tactical_tests', ['player_id'], unique=False)
     op.create_table('technical_stats',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -649,8 +741,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_technical_stats_organization_id'), 'technical_stats', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_technical_stats_player_id'), 'technical_stats', ['player_id'], unique=False)
     op.create_table('technical_tests',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('test_date', sa.Date(), nullable=False),
@@ -682,8 +772,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_technical_tests_organization_id'), 'technical_tests', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_technical_tests_player_id'), 'technical_tests', ['player_id'], unique=False)
     op.create_table('training_plans',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -701,8 +789,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_training_plans_organization_id'), 'training_plans', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_training_plans_player_id'), 'training_plans', ['player_id'], unique=False)
     op.create_table('users',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('email', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -722,9 +808,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
-    op.create_index(op.f('ix_users_organization_id'), 'users', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_users_player_id'), 'users', ['player_id'], unique=False)
     op.create_table('video_events',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('video_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -742,9 +825,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['video_id'], ['videos.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_video_events_organization_id'), 'video_events', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_video_events_player_id'), 'video_events', ['player_id'], unique=False)
-    op.create_index(op.f('ix_video_events_video_id'), 'video_events', ['video_id'], unique=False)
     op.create_table('wellness_data',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('date', sa.Date(), nullable=False),
@@ -773,8 +853,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_wellness_data_organization_id'), 'wellness_data', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_wellness_data_player_id'), 'wellness_data', ['player_id'], unique=False)
     op.create_table('audit_logs',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('timestamp', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
@@ -795,9 +873,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_audit_logs_organization_id'), 'audit_logs', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_audit_logs_timestamp'), 'audit_logs', ['timestamp'], unique=False)
-    op.create_index(op.f('ix_audit_logs_user_id'), 'audit_logs', ['user_id'], unique=False)
     op.create_table('automated_insights',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=True),
@@ -830,9 +905,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_automated_insights_organization_id'), 'automated_insights', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_automated_insights_player_id'), 'automated_insights', ['player_id'], unique=False)
-    op.create_index(op.f('ix_automated_insights_team_id'), 'automated_insights', ['team_id'], unique=False)
     op.create_table('plan_tasks',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('plan_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -853,8 +925,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['plan_id'], ['training_plans.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_plan_tasks_organization_id'), 'plan_tasks', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_plan_tasks_plan_id'), 'plan_tasks', ['plan_id'], unique=False)
     op.create_table('player_goals',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('player_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -886,8 +956,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['player_id'], ['players.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_player_goals_organization_id'), 'player_goals', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_player_goals_player_id'), 'player_goals', ['player_id'], unique=False)
     op.create_table('reports',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('report_type', sa.Enum('PLAYER', 'TEAM', 'STAFF_WEEKLY', name='reporttype'), nullable=False),
@@ -908,9 +976,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_reports_organization_id'), 'reports', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_reports_player_id'), 'reports', ['player_id'], unique=False)
-    op.create_index(op.f('ix_reports_team_id'), 'reports', ['team_id'], unique=False)
     op.create_table('plan_adherences',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('task_id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
@@ -926,9 +991,6 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['task_id'], ['plan_tasks.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_plan_adherences_organization_id'), 'plan_adherences', ['organization_id'], unique=False)
-    op.create_index(op.f('ix_plan_adherences_player_id'), 'plan_adherences', ['player_id'], unique=False)
-    op.create_index(op.f('ix_plan_adherences_task_id'), 'plan_adherences', ['task_id'], unique=False)
     op.create_table('report_caches',
     sa.Column('id', sqlmodel.sql.sqltypes.GUID(), nullable=False),
     sa.Column('cache_key', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -939,7 +1001,6 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('cache_key')
     )
-    op.create_index(op.f('ix_report_caches_report_id'), 'report_caches', ['report_id'], unique=False)
     # ### end Alembic commands ###
 
 
@@ -1003,6 +1064,21 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_psychological_profile_player_id'), table_name='psychological_profile')
     op.drop_index(op.f('ix_psychological_profile_organization_id'), table_name='psychological_profile')
     op.drop_table('psychological_profile')
+    op.drop_index(op.f('ix_player_training_stats_training_session_id'), table_name='player_training_stats')
+    op.drop_index(op.f('ix_player_training_stats_player_id'), table_name='player_training_stats')
+    op.drop_index(op.f('ix_player_training_stats_organization_id'), table_name='player_training_stats')
+    op.drop_index('idx_player_training_player_session', table_name='player_training_stats')
+    op.drop_index('idx_player_training_org', table_name='player_training_stats')
+    op.drop_table('player_training_stats')
+    op.drop_index(op.f('ix_player_stats_session_id'), table_name='player_stats')
+    op.drop_index(op.f('ix_player_stats_season'), table_name='player_stats')
+    op.drop_index(op.f('ix_player_stats_player_id'), table_name='player_stats')
+    op.drop_index(op.f('ix_player_stats_organization_id'), table_name='player_stats')
+    op.drop_index(op.f('ix_player_stats_match_id'), table_name='player_stats')
+    op.drop_index('idx_player_stats_player_season', table_name='player_stats')
+    op.drop_index('idx_player_stats_player_date', table_name='player_stats')
+    op.drop_index('idx_player_stats_org_date', table_name='player_stats')
+    op.drop_table('player_stats')
     op.drop_index(op.f('ix_physical_tests_player_id'), table_name='physical_tests')
     op.drop_index(op.f('ix_physical_tests_organization_id'), table_name='physical_tests')
     op.drop_table('physical_tests')
