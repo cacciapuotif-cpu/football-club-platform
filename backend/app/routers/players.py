@@ -189,7 +189,7 @@ async def get_player_sessions(
         .join(SensorData, SensorData.session_id == TrainingSession.id)
         .where(
             SensorData.player_id == player_id,
-            TrainingSession.organization_id == current_user.organization_id
+            TrainingSession.organization_id == org_id
         )
         .order_by(TrainingSession.session_date.desc())
     )

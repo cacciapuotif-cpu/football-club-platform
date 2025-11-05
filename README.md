@@ -20,6 +20,23 @@ Sistema completo per monitoraggio atleti, analisi video, ML predittivo, piani pe
 - **Benchmark Anonimo** role/age per confronto multi-club (opt-in)
 - **GDPR Compliant** con consensi, audit log, export e pseudonimizzazione
 
+### ⚡ NEW: Player Progress Tracking (EAV Architecture)
+
+- **Flexible Metrics**: EAV (Entity-Attribute-Value) structure for wellness, training, and match metrics
+- **Time-series Analysis**: Day/week/month aggregations with trend detection
+- **ACWR Monitoring**: Acute:Chronic Workload Ratio with injury risk alerts
+- **ML Risk Prediction**: Baseline injury prediction with SHAP-like feature explanations
+- **Data Quality**: Automated validation, outlier detection, and completeness tracking
+- **Progress API**: RESTful endpoints for player overview, training load, and performance trends
+
+**Key Endpoints**:
+- `GET /api/v1/players/{id}/progress` - Time-series metrics with flexible bucketing
+- `GET /api/v1/players/{id}/training-load` - sRPE & ACWR calculation
+- `GET /api/v1/players/{id}/overview` - KPIs with data completeness
+- `POST /api/v1/progress-ml/players/{id}/predict-risk` - Injury risk with recommendations
+
+📖 **Documentation**: See [`API_USAGE.md`](backend/API_USAGE.md) and [`SEEDING_GUIDE.md`](backend/SEEDING_GUIDE.md)
+
 ---
 
 ## 📋 Prerequisiti
@@ -108,9 +125,12 @@ make ps                # Stato containers
 
 # Database
 make migrate           # Esegui migrazioni
-make seed              # Carica dati demo
+make seed              # Carica dati demo (legacy)
 make db-backup         # Backup database
 make db-restore FILE=backup.sql  # Restore
+
+# Progress Tracking (NEW)
+python backend/scripts/seed_demo_data.py  # Seed EAV progress data (90 days, 25 players)
 
 # Sviluppo
 make test              # Test backend

@@ -35,6 +35,12 @@ from app.models.advanced_tracking import (
     PlayerGoal,
 )
 
+# New EAV models for flexible metrics
+from app.models.wellness_eav import WellnessSession, WellnessMetric
+from app.models.training_eav import TrainingAttendance, TrainingMetric
+from app.models.match_eav import MatchMetric, MatchPlayerPosition
+from app.models.catalog import MetricCatalog, DataQualityLog, DataCompleteness
+
 __all__ = [
     "User",
     "Organization",
@@ -74,4 +80,14 @@ __all__ = [
     "MatchPlayerStats",
     "DailyReadiness",
     "AutomatedInsight",
+    # EAV models for flexible metrics
+    "WellnessSession",
+    "WellnessMetric",
+    "TrainingAttendance",
+    "TrainingMetric",
+    "MatchMetric",
+    "MatchPlayerPosition",
+    "MetricCatalog",
+    "DataQualityLog",
+    "DataCompleteness",
 ]

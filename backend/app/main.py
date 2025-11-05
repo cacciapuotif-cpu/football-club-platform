@@ -238,6 +238,8 @@ from app.routers import (
     performance,
     plans,
     players,
+    progress,  # NEW: Player progress tracking
+    progress_ml,  # NEW: ML predictions for progress
     quick_input,
     reports,
     sessions,
@@ -266,6 +268,12 @@ app.include_router(advanced_tracking.router, prefix=f"{api_prefix}/tracking", ta
 app.include_router(ml_predict.router, prefix=f"{api_prefix}/ml", tags=["ML Predictions"])
 app.include_router(ml_reports.router)  # ML Reports & Predictions (has its own prefix)
 app.include_router(youth_ml.router, prefix=f"{api_prefix}/youth-ml", tags=["Youth ML - Performance & Development"])
+
+# ============================================
+# NEW ROUTERS - Player Progress & ML Insights
+# ============================================
+app.include_router(progress.router, prefix=api_prefix, tags=["Player Progress Tracking"])
+app.include_router(progress_ml.router, prefix=f"{api_prefix}/progress-ml", tags=["Progress ML - Risk & Insights"])
 
 # ============================================
 # NEW CRITICAL ROUTERS - FULLY IMPLEMENTED

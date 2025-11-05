@@ -176,3 +176,130 @@ async def get_player_weekly_load(
         weeks=weekly_data,
         total_current_week=current_week_total
     )
+
+
+# ============================================================================
+# NEW EAV ENDPOINTS - Training Attendance with flexible metrics
+# ============================================================================
+
+from typing import List
+from pydantic import BaseModel
+from app.models.training_eav import TrainingAttendance, TrainingMetric
+from uuid import uuid4
+
+
+class AttendanceMetricIn(BaseModel):
+    """Individual metric for a training attendance."""
+    metric_key: str
+    metric_value: float
+    unit: str | None = None
+    tags: str | None = None
+
+
+class AttendanceUpsertIn(BaseModel):
+    """Player attendance data for batch upsert."""
+    player_id: UUID
+    status: str = "present"
+    minutes: int | None = None
+    participation_pct: int | None = None
+    rpe_post: int | None = None
+    metrics: List[AttendanceMetricIn] = []
+
+
+class AttendanceUpsertResponse(BaseModel):
+    """Response for batch upsert."""
+    training_session_id: UUID
+    updated_count: int
+    created_count: int
+
+
+@router.post("/sessions/{session_id}/attendance:batch-upsert", response_model=AttendanceUpsertResponse)
+async def batch_upsert_attendance(
+    session_id: UUID,
+    attendances: List[AttendanceUpsertIn],
+    db_session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """
+    Batch upsert training attendance for multiple players.
+
+    Creates or updates attendance records with flexible metrics.
+    Replaces existing metrics for each attendance record.
+    """
+
+    # Verify session exists
+    session_result = await db_session.execute(
+        select(TrainingSession).where(TrainingSession.id == session_id)
+    )
+    training_session = session_result.scalar_one_or_none()
+
+    if not training_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Training session {session_id} not found"
+        )
+
+    # Get org_id for multi-tenancy
+    org_id = training_session.organization_id
+
+    created_count = 0
+    updated_count = 0
+
+    for att_data in attendances:
+        # Check if attendance already exists
+        att_result = await db_session.execute(
+            select(TrainingAttendance).where(
+                TrainingAttendance.training_session_id == session_id,
+                TrainingAttendance.player_id == att_data.player_id
+            )
+        )
+        attendance = att_result.scalar_one_or_none()
+
+        if attendance:
+            # Update existing
+            attendance.status = att_data.status
+            attendance.minutes = att_data.minutes
+            attendance.participation_pct = att_data.participation_pct
+            attendance.rpe_post = att_data.rpe_post
+            updated_count += 1
+        else:
+            # Create new
+            attendance = TrainingAttendance(
+                id=uuid4(),
+                training_session_id=session_id,
+                player_id=att_data.player_id,
+                status=att_data.status,
+                minutes=att_data.minutes,
+                participation_pct=att_data.participation_pct,
+                rpe_post=att_data.rpe_post,
+                organization_id=org_id,
+            )
+            db_session.add(attendance)
+            created_count += 1
+
+        await db_session.flush()
+
+        # Delete existing metrics and replace with new ones
+        await db_session.execute(
+            text("DELETE FROM training_metrics WHERE training_attendance_id = :att_id"),
+            {"att_id": attendance.id}
+        )
+
+        # Add new metrics
+        for metric_data in att_data.metrics:
+            metric = TrainingMetric(
+                id=uuid4(),
+                training_attendance_id=attendance.id,
+                metric_key=metric_data.metric_key,
+                metric_value=metric_data.metric_value,
+                unit=metric_data.unit,
+                tags=metric_data.tags,
+            )
+            db_session.add(metric)
+
+    await db_session.commit()
+
+    return AttendanceUpsertResponse(
+        training_session_id=session_id,
+        updated_count=updated_count,
+        created_count=created_count,
+    )

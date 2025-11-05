@@ -43,6 +43,13 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
+    # Ensure required extensions for UUID generation are present (for gen_random_uuid used by seeds)
+    try:
+        connection.exec_driver_sql('CREATE EXTENSION IF NOT EXISTS "pgcrypto";')
+    except Exception:
+        # Non-fatal in case of insufficient privileges; migrations can still run
+        pass
+
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():

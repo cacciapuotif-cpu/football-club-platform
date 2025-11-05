@@ -127,7 +127,8 @@
       "Bash(chmod:*)",
       "Bash(alembic current:*)",
       "Bash(do)",
-      "Bash(PLAYER_ID=\"33333333-3333-3333-3333-333333333331\")"
+      "Bash(PLAYER_ID=\"33333333-3333-3333-3333-333333333331\")",
+      "Bash(poetry run alembic:*)"
     ],
     "deny": [],
     "ask": []
