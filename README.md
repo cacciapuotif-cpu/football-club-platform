@@ -692,6 +692,223 @@ curl -X POST http://localhost:8000/api/v1/advanced-analytics/ml/retrain
 
 ---
 
+## 📊 Player Dashboard
+
+### Overview
+
+La **Player Dashboard** è una dashboard completa e interattiva per il monitoraggio delle performance dei giocatori, con 5 tab dedicate a diverse aree di analisi:
+
+1. **Overview**: KPI principali, Readiness Index, Alert recenti, e completezza dati
+2. **Wellness**: Time-series delle metriche di benessere con selezione multi-metrica
+3. **Allenamento**: Carichi di allenamento, ACWR, Monotony, e Strain
+4. **Partite**: Aggregati e trend delle metriche di match
+5. **Tattico**: Visualizzazione delle metriche tattiche (pressures, recoveries, progressive passes, etc.)
+
+### Accesso
+
+La dashboard è accessibile dalla lista giocatori:
+- Naviga su **Giocatori** → clicca **Dashboard** per un giocatore
+- URL: `http://localhost:3000/players/{player_id}/dashboard`
+
+### Funzionalità
+
+#### Filtri Persistenti
+
+Tutti i filtri sono sincronizzati con l'URL (querystring) per permettere:
+- Condivisione di link con filtri pre-impostati
+- Navigazione browser (back/forward) con stato preservato
+- Refresh pagina senza perdere le selezioni
+
+**Filtri disponibili**:
+- **Date Range**: `date_from` e `date_to` (default: ultimi 90 giorni)
+- **Raggruppamento**: `grouping` (day/week/month, default: week)
+- **Tab attiva**: `tab` (overview/wellness/allenamento/partite/tattico)
+
+#### Tab Overview
+
+**KPI Cards**:
+- **Readiness**: Ultimo valore e media 7 giorni (0-100, baseline 50)
+- **ACWR**: Ultimo valore Acute:Chronic Workload Ratio
+- **Carico 7d**: sRPE totale ultimi 7 giorni
+- **Monotony**: Valore settimana corrente
+- **Strain**: Valore settimana corrente
+
+**Alert Banner**:
+- Mostra gli ultimi 5 alert degli ultimi 7 giorni
+- Tipi di alert: `risk_load`, `risk_fatigue`, `risk_outlier`
+- Severità: `warning` (giallo) o `error` (rosso)
+
+**Readiness Index Chart**:
+- Line chart con serie temporale del Readiness Index
+- Linea di riferimento a 50 (baseline)
+- Tooltip interattivo con valori precisi
+
+**Completezza Dati**:
+- Percentuale di completezza per famiglia (wellness, training, match)
+- Giorni con dati vs giorni totali nel periodo
+
+#### Tab Wellness
+
+**Selezione Metriche**:
+- Toggle multi-select per mostrare/nascondere metriche
+- Metriche disponibili:
+  - Ore Sonno, Qualità Sonno
+  - Fatica, Indolenzimento, Stress
+  - Umore, Motivazione
+  - FC Riposo, HRV
+
+**Time-Series Chart**:
+- Line chart interattivo con tutte le metriche selezionate
+- Legenda cliccabile per mostrare/nascondere singole metriche
+- Tooltip con valori precisi per ogni punto
+- Formattazione date in italiano
+
+#### Tab Allenamento
+
+**ACWR Chart**:
+- Area chart con ACWR (Acute:Chronic Workload Ratio)
+- Linee di riferimento a 0.8 (min) e 1.5 (max)
+- Range ideale evidenziato visivamente
+
+**Monotony & Strain**:
+- Bar chart settimanale per Monotony
+- Bar chart settimanale per Strain
+- Side-by-side per confronto rapido
+
+**Training Metrics Chart**:
+- Line chart con metriche selezionate (RPE, Distanza, HSR, Sprint, FC Media)
+- Selezione multi-metrica con toggle
+
+#### Tab Partite
+
+**Aggregati Periodo**:
+- Cards con statistiche aggregate:
+  - Partite totali
+  - Minuti medi
+  - Precisione passaggi media
+  - Passaggi totali
+  - Duel vinti totali
+  - Tocchi totali
+
+**Trend Metriche**:
+- Line chart con trend delle metriche di match selezionate
+- Metriche disponibili: Precisione Passaggi, Passaggi Completati, Duel Vinti, Tocchi, Tiri in Porta
+
+**Tabella Dettaglio Partite**:
+- Tabella completa con tutte le partite del periodo
+- Colonne: Data, Avversario (🏠/✈️), Minuti, Passaggi (completati + %), Duel, Tocchi
+
+#### Tab Tattico
+
+**Metriche Tattiche**:
+- Line chart con metriche tattiche:
+  - Pressures
+  - Recoveries Defensive Third
+  - Progressive Passes
+  - xThreat Contribution
+- Placeholder per future metriche avanzate
+
+### Export CSV
+
+**Funzionalità**:
+- Bottone **Export CSV** nella barra filtri
+- Esporta i dati della tab corrente:
+  - **Wellness**: Serie time-series con tutte le metriche
+  - **Allenamento**: Serie sRPE e ACWR
+  - **Partite**: Dettaglio completo partite
+
+**Formato**:
+- File CSV con header
+- Nome file: `{tab}_{player_id}_{date_from}_{date_to}.csv`
+- Encoding UTF-8
+
+### Screenshots
+
+#### Overview Tab
+```
+┌─────────────────────────────────────────────────┐
+│  [Readiness: 72.3] [ACWR: 1.12] [Carico 7d: 450] │
+│  [Monotony: 2.1] [Strain: 980]                  │
+├─────────────────────────────────────────────────┤
+│  ⚠️ Alert Recenti                               │
+│  • risk_load: acwr > 1.5 (2025-01-15)          │
+├─────────────────────────────────────────────────┤
+│  Readiness Index Chart                          │
+│  [Line chart con trend 0-100]                   │
+├─────────────────────────────────────────────────┤
+│  Completezza Dati                               │
+│  Wellness: 85% | Training: 90% | Match: 75%   │
+└─────────────────────────────────────────────────┘
+```
+
+#### Wellness Tab
+```
+┌─────────────────────────────────────────────────┐
+│  ☑ Qualità Sonno ☑ Fatica ☑ Umore ☐ Stress   │
+├─────────────────────────────────────────────────┤
+│  Trend Wellness                                 │
+│  [Line chart multi-metrica interattivo]         │
+└─────────────────────────────────────────────────┘
+```
+
+#### Allenamento Tab
+```
+┌─────────────────────────────────────────────────┐
+│  ACWR Chart                                     │
+│  [Area chart con linee 0.8/1.5]                 │
+├─────────────────────────────────────────────────┤
+│  [Monotony Bar] [Strain Bar]                    │
+├─────────────────────────────────────────────────┤
+│  Training Metrics                               │
+│  [Line chart RPE, Distanza, HSR, etc.]          │
+└─────────────────────────────────────────────────┘
+```
+
+### API Endpoints Utilizzati
+
+La dashboard utilizza i seguenti endpoint backend:
+
+- `GET /api/v1/players/{id}/overview` - KPI e completezza dati
+- `GET /api/v1/players/{id}/progress` - Time-series metriche per famiglia
+- `GET /api/v1/players/{id}/training-load` - sRPE, ACWR, Monotony, Strain
+- `GET /api/v1/players/{id}/match-summary` - Aggregati partite
+- `GET /api/v1/players/{id}/readiness` - Readiness Index serie
+- `GET /api/v1/players/{id}/alerts` - Alert recenti
+
+### Istruzioni d'Uso
+
+1. **Accedi alla Dashboard**:
+   - Vai su **Giocatori** → clicca **Dashboard** per un giocatore
+
+2. **Naviga tra le Tab**:
+   - Clicca su Overview, Wellness, Allenamento, Partite, o Tattico
+
+3. **Modifica Filtri**:
+   - Cambia date, raggruppamento, o seleziona metriche
+   - I filtri si aggiornano automaticamente nell'URL
+
+4. **Interagisci con i Grafici**:
+   - Hover per vedere valori precisi
+   - Clicca sulla legenda per mostrare/nascondere metriche
+   - Zoom e pan (se abilitato)
+
+5. **Esporta Dati**:
+   - Clicca **Export CSV** per scaricare i dati della tab corrente
+
+6. **Monitora Alert**:
+   - Controlla il banner alert nella tab Overview
+   - Alert automatici per ACWR fuori range, Readiness bassa, outlier
+
+### Note Tecniche
+
+- **Librerie**: Recharts per grafici, Radix UI per tabs
+- **State Management**: React hooks con URL sync
+- **Responsive**: Mobile-first design con breakpoints Tailwind
+- **Performance**: Lazy loading dati per tab, memoization grafici
+- **Accessibilità**: ARIA labels, keyboard navigation, focus management
+
+---
+
 ## 🧪 Testing
 
 ```bash
