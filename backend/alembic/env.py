@@ -1,5 +1,7 @@
 """Alembic environment configuration."""
 
+import os
+import sys
 import asyncio
 from logging.config import fileConfig
 
@@ -10,15 +12,30 @@ from sqlmodel import SQLModel
 
 from alembic import context
 
-# Import all models for autogeneration
-from app.models import *  # noqa: F401, F403
+# --- PATH per importare app/*
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
+# --- Importa TUTTI i modelli (popola la metadata)
+from app import models  # noqa: F401  # importa l'__init__ che carica tutti i model
 from app.config import settings
 
 # Alembic Config object
 config = context.config
 
-# Override sqlalchemy.url from env
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# --- URL DB dalle tue settings (adatta alla tua funzione)
+try:
+    # Prefer a helper if available
+    from app.database import get_engine_url  # type: ignore
+
+    db_url = get_engine_url()  # sync str
+except Exception:
+    # Fallback alla URL diretta da settings
+    db_url = settings.DATABASE_URL
+
+# Override sqlalchemy.url from resolved URL
+config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging
 if config.config_file_name is not None:

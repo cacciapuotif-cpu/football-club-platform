@@ -264,6 +264,13 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
               Dashboard
             </Link>
             <Link
+              href={`/players/${player.id}/wellness`}
+              prefetch={false}
+              className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+            >
+              Wellness Trend
+            </Link>
+            <Link
               href={`/players/${player.id}/load`}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
             >
@@ -271,6 +278,7 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
             </Link>
             <Link
               href={`/players/${player.id}/edit`}
+              prefetch={false}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               Modifica
@@ -500,6 +508,7 @@ export default function PlayerDetailPage({ params }: { params: { id: string } })
           </Link>
           <Link
             href={`/players/${player.id}/edit`}
+            prefetch={false}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             Modifica Giocatore

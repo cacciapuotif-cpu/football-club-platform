@@ -202,6 +202,7 @@ export default function PlayersPage() {
                     </Link>
                     <Link
                       href={`/players/${player.id}/edit`}
+                      prefetch={false}
                       className="text-indigo-600 hover:text-indigo-900"
                     >
                       Modifica

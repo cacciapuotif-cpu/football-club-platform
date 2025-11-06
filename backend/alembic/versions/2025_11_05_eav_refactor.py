@@ -41,6 +41,8 @@ def upgrade() -> None:
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), onupdate=sa.text('now()'), nullable=False),
     )
     op.create_index('idx_wellness_session_player_date', 'wellness_sessions', ['player_id', 'date'])
+    # UNIQUE: one session per player per date
+    op.create_unique_constraint('uix_wellness_sessions_player_date', 'wellness_sessions', ['player_id', 'date'])
 
     op.create_table(
         'wellness_metrics',
@@ -73,6 +75,8 @@ def upgrade() -> None:
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), onupdate=sa.text('now()'), nullable=False),
     )
     op.create_index('idx_training_attendance_session_player', 'training_attendance', ['training_session_id', 'player_id'])
+    # UNIQUE: one attendance per player per training session
+    op.create_unique_constraint('uix_training_attendance_session_player', 'training_attendance', ['training_session_id', 'player_id'])
 
     op.create_table(
         'training_metrics',

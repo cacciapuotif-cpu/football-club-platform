@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Optional
 from uuid import UUID, uuid4
 
 from sqlmodel import Column, DateTime, Field, Relationship, SQLModel
-from sqlalchemy import func
+from sqlalchemy import func, UniqueConstraint
 
 if TYPE_CHECKING:
     from app.models.player import Player
@@ -22,6 +22,9 @@ class WellnessSession(SQLModel, table=True):
     """
 
     __tablename__ = "wellness_sessions"
+    __table_args__ = (
+        UniqueConstraint('player_id', 'date', name='uq_wellness_session_player_date'),
+    )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     player_id: UUID = Field(foreign_key="players.id", index=True)
