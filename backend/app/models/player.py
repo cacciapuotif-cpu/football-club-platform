@@ -124,6 +124,9 @@ class Player(SQLModel, table=True):
     potential_rating: float | None = Field(default=6.0, ge=0, le=10)
     form_level: float | None = Field(default=5.0, ge=0, le=10)
 
+    # Profile photo
+    foto_url: str | None = Field(default=None, max_length=500, description="URL foto profilo")
+
     # Status
     is_active: bool = Field(default=True)
     is_injured: bool = Field(default=False)

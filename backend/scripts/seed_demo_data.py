@@ -132,12 +132,12 @@ async def seed_season_and_team(session: AsyncSession, org: Organization):
 
 
 async def seed_players(session: AsyncSession, team: Team, org: Organization):
-    """Create 2 players (GK and CM) if not exist."""
+    """Create 2-3 players (GK, CM, FW) if not exist."""
     print("👥 Creating players...")
 
     # Check existing players for this team with specific external_ids
     result = await session.execute(
-        text("SELECT id FROM players WHERE team_id = :team_id AND external_id IN ('DEMO_GK_01', 'DEMO_CM_01')"),
+        text("SELECT id FROM players WHERE team_id = :team_id AND external_id IN ('DEMO_GK_01', 'DEMO_CM_01', 'DEMO_FW_01')"),
         {"team_id": team.id}
     )
     existing_players = result.fetchall()
@@ -184,17 +184,35 @@ async def seed_players(session: AsyncSession, team: Team, org: Organization):
     )
     session.add(cm)
     
+    # Create FW (Forward) - third player
+    fw = Player(
+        id=uuid4(),
+        external_id="DEMO_FW_01",
+        first_name="Andrea",
+        last_name="Verdi",
+        date_of_birth=date(2008, 5, 10),
+        nationality="IT",
+        role_primary="FW",
+        height_cm=180,
+        weight_kg=72,
+        jersey_number=9,
+        organization_id=org.id,
+        team_id=team.id,
+    )
+    session.add(fw)
+    
     await session.flush()
-    players = [gk, cm]
-    print(f"   ✅ Created {len(players)} players: GK (Marco Rossi) and CM (Luca Bianchi)")
+    players = [gk, cm, fw]
+    print(f"   ✅ Created {len(players)} players: GK (Marco Rossi), CM (Luca Bianchi), FW (Andrea Verdi)")
     return players
 
 
 async def seed_wellness_data(session: AsyncSession, players: list[Player], org: Organization):
-    """Create 90 days of wellness data for each player."""
-    print("😴 Creating wellness data (90 days per player)...")
+    """Create 60-90 days of wellness data for each player with weekly weight."""
+    print("😴 Creating wellness data (60-90 days per player)...")
 
     today = date.today()
+    days_to_generate = random.randint(60, 90)  # Random between 60-90 days
 
     # Check if wellness already seeded
     result = await session.execute(
@@ -203,7 +221,7 @@ async def seed_wellness_data(session: AsyncSession, players: list[Player], org: 
     )
     existing_count = result.scalar()
 
-    if existing_count >= 80:  # If >80 entries exist, assume already seeded
+    if existing_count >= 55:  # If >55 entries exist, assume already seeded
         print(f"   ℹ️  Wellness data already seeded ({existing_count} sessions for first player), skipping...")
         return
 
@@ -211,8 +229,13 @@ async def seed_wellness_data(session: AsyncSession, players: list[Player], org: 
     total_metrics = 0
 
     for player in players:
-        for day_offset in range(90):
-            session_date = today - timedelta(days=89 - day_offset)
+        # Base weight for this player (varies slightly over time)
+        base_weight = player.weight_kg or 70.0
+        last_weight_date = None
+        last_weight_value = base_weight
+        
+        for day_offset in range(days_to_generate):
+            session_date = today - timedelta(days=days_to_generate - 1 - day_offset)
 
             # Skip some days randomly (simulate missing data ~10%)
             if random.random() < 0.10:
@@ -241,6 +264,15 @@ async def seed_wellness_data(session: AsyncSession, players: list[Player], org: 
                 base_fatigue += random.uniform(1.0, 2.0)
                 base_doms += random.uniform(0.5, 1.5)
 
+            # Weight: only add weekly (every 7 days) with gradual variation
+            weight_metric = None
+            if day_offset % 7 == 0 or last_weight_date is None:  # Weekly weight
+                # Gradual weight variation (±0.5kg per week)
+                weight_change = random.uniform(-0.5, 0.5)
+                last_weight_value = max(65.0, min(85.0, last_weight_value + weight_change))
+                weight_metric = ("body_weight_kg", round(last_weight_value, 1), "kg")
+                last_weight_date = session_date
+
             metrics_data = [
                 ("sleep_hours", min(max(base_sleep - 1 + random.uniform(-0.5, 0.5), 4), 12), "hours"),
                 ("sleep_quality", min(max(base_sleep + random.uniform(-0.5, 0.5), 1), 10), "score"),
@@ -250,10 +282,13 @@ async def seed_wellness_data(session: AsyncSession, players: list[Player], org: 
                 ("mood", min(max(base_mood + random.uniform(-1.0, 1.0), 1), 10), "score"),
                 ("motivation", min(max(random.uniform(6.0, 9.0), 1), 10), "score"),
                 ("hydration", random.randint(6, 9), "score"),
-                ("body_weight_kg", round(70 + random.uniform(-2, 2), 1), "kg"),
                 ("resting_hr_bpm", random.randint(50, 65), "bpm"),
                 ("hrv_ms", random.randint(40, 80), "ms"),
             ]
+            
+            # Add weight only if it's a weekly measurement
+            if weight_metric:
+                metrics_data.append(weight_metric)
 
             for metric_key, value, unit in metrics_data:
                 wm = WellnessMetric(
@@ -267,7 +302,7 @@ async def seed_wellness_data(session: AsyncSession, players: list[Player], org: 
                 total_metrics += 1
 
     await session.commit()
-    print(f"   ✅ Created {total_sessions} wellness sessions with {total_metrics} metrics")
+    print(f"   ✅ Created {total_sessions} wellness sessions with {total_metrics} metrics (including weekly weight)")
 
 
 async def seed_training_sessions(session: AsyncSession, team: Team, players: list[Player], org: Organization):

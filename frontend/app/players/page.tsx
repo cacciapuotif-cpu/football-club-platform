@@ -189,23 +189,22 @@ export default function PlayersPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <Link
-                      href={`/players/${player.id}/dashboard`}
+                      href={`/players/${player.id}/profile`}
                       className="text-green-600 hover:text-green-900 mr-3"
                     >
                       Dashboard
                     </Link>
                     <Link
-                      href={`/players/${player.id}`}
+                      href={`/data/player/${player.id}`}
                       className="text-blue-600 hover:text-blue-900 mr-3"
                     >
-                      Dettagli
+                      Dati
                     </Link>
                     <Link
-                      href={`/players/${player.id}/edit`}
-                      prefetch={false}
-                      className="text-indigo-600 hover:text-indigo-900"
+                      href={`/report/player/${player.id}`}
+                      className="text-purple-600 hover:text-purple-900 mr-3"
                     >
-                      Modifica
+                      Report
                     </Link>
                   </td>
                 </tr>

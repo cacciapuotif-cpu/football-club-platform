@@ -9,8 +9,10 @@ export default function Navbar() {
   const navItems = [
     { name: 'Home', path: '/', prefetch: true },
     { name: 'Giocatori', path: '/players', prefetch: true },
-    { name: 'Sessioni', path: '/sessions', prefetch: false }, // Disable prefetch to avoid 404 on /sessions/:id/edit
-    { name: 'Wellness', path: '/wellness', prefetch: true },
+    { name: 'Dati Wellness', path: '/data', prefetch: true },
+    { name: 'Report', path: '/report', prefetch: true },
+    { name: 'ML Predittivo', path: '/ml-predictive', prefetch: true },
+    { name: 'Video Analysis', path: '/video-analysis', prefetch: true },
   ]
 
   return (
