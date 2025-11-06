@@ -396,4 +396,160 @@ For issues or questions:
 
 ---
 
-**Last Updated**: 2025-11-05
+## Readiness Index Endpoint
+
+### 7. Get Player Readiness
+
+**Endpoint**: `GET /api/v1/players/{player_id}/readiness`
+
+**Query Parameters**:
+- `date_from` (optional): Start date (YYYY-MM-DD, default: 90 days ago)
+- `date_to` (optional): End date (YYYY-MM-DD, default: today)
+
+**Response**:
+```json
+{
+  "player_id": "uuid",
+  "date_from": "2025-01-01",
+  "date_to": "2025-03-31",
+  "series": [
+    {
+      "date": "2025-01-15",
+      "readiness": 72.5
+    },
+    {
+      "date": "2025-01-16",
+      "readiness": 68.3
+    }
+  ],
+  "latest_value": 68.3,
+  "avg_7d": 70.1
+}
+```
+
+**Readiness Index (0-100)**:
+- **0-40**: Low readiness (high fatigue risk)
+- **40-60**: Moderate readiness
+- **60-80**: Good readiness
+- **80-100**: Excellent readiness
+
+**Calculation**: Composite index using z-scores of:
+- HRV (positive), Resting HR (negative), Sleep Quality (positive)
+- Soreness (negative), Stress (negative), Mood (positive)
+- Body Weight (negative, mild)
+
+**Example**:
+```bash
+curl "http://localhost:8000/api/v1/players/{player_id}/readiness?date_from=2025-01-01&date_to=2025-03-31"
+```
+
+---
+
+## Alerts Endpoint
+
+### 8. Get Player Alerts
+
+**Endpoint**: `GET /api/v1/players/{player_id}/alerts`
+
+**Query Parameters**:
+- `date_from` (optional): Start date (YYYY-MM-DD, default: 90 days ago)
+- `date_to` (optional): End date (YYYY-MM-DD, default: today)
+
+**Response**:
+```json
+{
+  "player_id": "uuid",
+  "date_from": "2025-01-01",
+  "date_to": "2025-03-31",
+  "alerts": [
+    {
+      "type": "risk_load",
+      "metric": "acwr",
+      "date": "2025-01-20",
+      "value": 1.65,
+      "threshold": "> 1.5 (high spike, injury risk)",
+      "severity": "error"
+    },
+    {
+      "type": "risk_fatigue",
+      "metric": "readiness",
+      "date": "2025-02-15",
+      "value": 38.5,
+      "threshold": "< 40 for 3 days",
+      "severity": "error"
+    },
+    {
+      "type": "risk_outlier",
+      "metric": "resting_hr_bpm",
+      "date": "2025-03-10",
+      "value": 75.0,
+      "threshold": "|z-score| >= 2.0 (high)",
+      "severity": "warning"
+    }
+  ]
+}
+```
+
+**Alert Types**:
+- **risk_load**: ACWR outside [0.8, 1.5] range
+- **risk_fatigue**: Readiness < 40 for 3+ consecutive days
+- **risk_outlier**: |z-score| >= 2 for resting_hr_bpm, hrv_ms, soreness, mood
+
+**Severity Levels**:
+- **warning**: Moderate risk
+- **error**: High risk requiring attention
+
+**Example**:
+```bash
+curl "http://localhost:8000/api/v1/players/{player_id}/alerts?date_from=2025-01-01&date_to=2025-03-31"
+```
+
+---
+
+## Training Load Extended Metrics
+
+### Updated Training Load Response
+
+The `GET /api/v1/players/{player_id}/training-load` endpoint now includes:
+
+**New Fields**:
+- `acwr_latest`: Latest ACWR value
+- `acwr_series`: Full ACWR time series
+- `monotony_weekly`: Weekly Monotony values (mean / std)
+- `strain_weekly`: Weekly Strain values (total_load × monotony)
+
+**Example Response**:
+```json
+{
+  "series": [...],
+  "window_short": 7,
+  "window_long": 28,
+  "acwr_latest": 1.12,
+  "acwr_series": [
+    {"date": "2025-01-15", "value": 1.08},
+    {"date": "2025-01-16", "value": 1.12}
+  ],
+  "monotony_weekly": [
+    {"week_start": "2025-01-13", "value": 2.3},
+    {"week_start": "2025-01-20", "value": 2.1}
+  ],
+  "strain_weekly": [
+    {"week_start": "2025-01-13", "value": 2100.5},
+    {"week_start": "2025-01-20", "value": 1950.2}
+  ],
+  "flags": [...]
+}
+```
+
+**Monotony Interpretation**:
+- **< 1.5**: Low monotony (good variability)
+- **1.5-2.0**: Moderate monotony
+- **> 2.0**: High monotony (low variability, injury risk)
+
+**Strain Interpretation**:
+- Higher values indicate higher training stress
+- Monitor in combination with ACWR and Readiness
+
+---
+
+**Last Updated**: 2025-11-06

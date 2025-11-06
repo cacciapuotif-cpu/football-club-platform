@@ -13,6 +13,16 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
+from app.analytics.training_load import (
+    calculate_acwr_rolling,
+    calculate_monotony_weekly,
+    calculate_strain_weekly,
+)
+from app.analytics.readiness import (
+    calculate_readiness_index,
+    calculate_baseline_28d,
+)
+from app.analytics.alerts import generate_alerts
 
 router = APIRouter()
 
@@ -69,6 +79,10 @@ class TrainingLoadResponse(BaseModel):
     series: list[TrainingLoadPoint]
     window_short: int
     window_long: int
+    acwr_latest: Optional[float] = None
+    acwr_series: list[dict] = []
+    monotony_weekly: list[dict] = []
+    strain_weekly: list[dict] = []
     flags: list[dict] = []
 
 
@@ -434,9 +448,13 @@ async def get_training_load(
     series = []
     flags = []
     
+    # Build daily_srpe list for analytics calculations
+    daily_srpe_list = []
     for row in rows:
         point_date = row[0]
         srpe_val = float(row[1])
+        daily_srpe_list.append((point_date, srpe_val))
+        
         acute_val = float(row[2]) if row[2] is not None else None
         chronic_val = float(row[3]) if row[3] is not None else None
         acwr_val = float(row[4]) if row[4] is not None else None
@@ -464,10 +482,41 @@ async def get_training_load(
                     "reason": f"acwr<{acwr_val:.2f}"
                 })
     
+    # Calculate Monotony and Strain
+    monotony_weekly = calculate_monotony_weekly(daily_srpe_list)
+    strain_weekly = calculate_strain_weekly(daily_srpe_list, monotony_weekly)
+    
+    # Get latest ACWR
+    acwr_latest = None
+    if series:
+        latest_point = series[-1]
+        acwr_latest = latest_point.acwr
+    
+    # Format series for response
+    acwr_series_formatted = [
+        {"date": d.isoformat(), "value": acwr}
+        for d, acwr in calculate_acwr_rolling(daily_srpe_list, window_short, window_long)
+        if acwr is not None
+    ]
+    monotony_formatted = [
+        {"week_start": d.isoformat(), "value": m}
+        for d, m in monotony_weekly
+        if m is not None
+    ]
+    strain_formatted = [
+        {"week_start": d.isoformat(), "value": s}
+        for d, s in strain_weekly
+        if s is not None
+    ]
+    
     return TrainingLoadResponse(
         series=series,
         window_short=window_short,
         window_long=window_long,
+        acwr_latest=acwr_latest,
+        acwr_series=acwr_series_formatted,
+        monotony_weekly=monotony_formatted,
+        strain_weekly=strain_formatted,
         flags=flags,
     )
 
@@ -880,4 +929,266 @@ async def get_match_summary(
         date_to=date_to,
         matches=matches,
         aggregates=aggregates,
+    )
+
+
+class ReadinessPoint(BaseModel):
+    """Single readiness data point."""
+    date: date
+    readiness: Optional[float]  # 0-100
+
+
+class ReadinessResponse(BaseModel):
+    """Response for readiness endpoint."""
+    player_id: UUID
+    date_from: date
+    date_to: date
+    series: list[ReadinessPoint]
+    latest_value: Optional[float] = None
+    avg_7d: Optional[float] = None
+
+
+@router.get("/players/{player_id}/readiness", response_model=ReadinessResponse)
+async def get_player_readiness(
+    player_id: UUID,
+    date_from: Optional[date] = Query(None, alias="date_from"),
+    date_to: Optional[date] = Query(None, alias="date_to"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Get player readiness index (0-100) based on z-scores of wellness metrics.
+    
+    Uses 28-day rolling baseline for normalization.
+    """
+    # Default date range: last 90 days
+    if date_to is None:
+        date_to = date.today()
+    if date_from is None:
+        date_from = date_to - timedelta(days=90)
+    
+    # Extend date_from to get 28-day baseline
+    baseline_start = date_from - timedelta(days=28)
+    
+    # Fetch wellness data
+    wellness_query = text("""
+        SELECT
+            ws.date,
+            MAX(CASE WHEN wm.metric_key = 'hrv_ms' THEN wm.metric_value END) AS hrv_ms,
+            MAX(CASE WHEN wm.metric_key = 'resting_hr_bpm' THEN wm.metric_value END) AS resting_hr_bpm,
+            MAX(CASE WHEN wm.metric_key = 'sleep_quality' THEN wm.metric_value END) AS sleep_quality,
+            MAX(CASE WHEN wm.metric_key = 'soreness' THEN wm.metric_value END) AS soreness,
+            MAX(CASE WHEN wm.metric_key = 'stress' THEN wm.metric_value END) AS stress,
+            MAX(CASE WHEN wm.metric_key = 'mood' THEN wm.metric_value END) AS mood,
+            MAX(CASE WHEN wm.metric_key = 'body_weight_kg' THEN wm.metric_value END) AS body_weight_kg
+        FROM wellness_sessions ws
+        LEFT JOIN wellness_metrics wm ON wm.wellness_session_id = ws.id
+        WHERE ws.player_id = :player_id
+          AND ws.date BETWEEN :baseline_start AND :date_to
+          AND wm.validity = 'valid'
+        GROUP BY ws.date
+        ORDER BY ws.date ASC
+    """)
+    
+    result = await session.execute(
+        wellness_query,
+        {
+            "player_id": player_id,
+            "baseline_start": baseline_start,
+            "date_to": date_to,
+        }
+    )
+    rows = result.fetchall()
+    
+    # Build wellness data list
+    wellness_data = []
+    for row in rows:
+        d = row[0]
+        metrics = {
+            'hrv_ms': float(row[1]) if row[1] is not None else None,
+            'resting_hr_bpm': float(row[2]) if row[2] is not None else None,
+            'sleep_quality': float(row[3]) if row[3] is not None else None,
+            'soreness': float(row[4]) if row[4] is not None else None,
+            'stress': float(row[5]) if row[5] is not None else None,
+            'mood': float(row[6]) if row[6] is not None else None,
+            'body_weight_kg': float(row[7]) if row[7] is not None else None,
+        }
+        wellness_data.append((d, metrics))
+    
+    # Calculate readiness for each day
+    readiness_series = []
+    for d, metrics in wellness_data:
+        if d < date_from:
+            continue  # Skip baseline days
+        
+        # Calculate baseline up to this date
+        baseline = calculate_baseline_28d(wellness_data, d)
+        
+        # Calculate readiness
+        readiness = calculate_readiness_index(
+            metrics['hrv_ms'],
+            metrics['resting_hr_bpm'],
+            metrics['sleep_quality'],
+            metrics['soreness'],
+            metrics['stress'],
+            metrics['mood'],
+            metrics['body_weight_kg'],
+            baseline
+        )
+        
+        readiness_series.append(ReadinessPoint(date=d, readiness=readiness))
+    
+    # Get latest value and 7d average
+    latest_value = None
+    avg_7d = None
+    
+    if readiness_series:
+        latest_value = readiness_series[-1].readiness
+        
+        # Calculate 7d average
+        last_7d = [r.readiness for r in readiness_series[-7:] if r.readiness is not None]
+        if last_7d:
+            avg_7d = sum(last_7d) / len(last_7d)
+    
+    return ReadinessResponse(
+        player_id=player_id,
+        date_from=date_from,
+        date_to=date_to,
+        series=readiness_series,
+        latest_value=latest_value,
+        avg_7d=avg_7d,
+    )
+
+
+class AlertResponse(BaseModel):
+    """Single alert response."""
+    type: str
+    metric: str
+    date: str
+    value: float
+    threshold: str
+    severity: str
+
+
+class AlertsResponse(BaseModel):
+    """Response for alerts endpoint."""
+    player_id: UUID
+    date_from: date
+    date_to: date
+    alerts: list[AlertResponse]
+
+
+@router.get("/players/{player_id}/alerts", response_model=AlertsResponse)
+async def get_player_alerts(
+    player_id: UUID,
+    date_from: Optional[date] = Query(None, alias="date_from"),
+    date_to: Optional[date] = Query(None, alias="date_to"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Get alerts for a player based on ACWR, Readiness, and outlier detection.
+    
+    Alert types:
+    - risk_load: ACWR outside [0.8, 1.5]
+    - risk_fatigue: Readiness < 40 for 3+ consecutive days
+    - risk_outlier: |z-score| >= 2 for resting_hr_bpm, hrv_ms, soreness, mood
+    """
+    # Default date range: last 90 days
+    if date_to is None:
+        date_to = date.today()
+    if date_from is None:
+        date_from = date_to - timedelta(days=90)
+    
+    # Get training load data for ACWR (extend back 35 days for baseline)
+    load_date_from = date_from - timedelta(days=35)
+    load_query = text("""
+        SELECT
+            ts.session_date::date AS date,
+            COALESCE(SUM(ta.rpe_post * ta.minutes), 0) AS srpe
+        FROM training_attendance ta
+        JOIN training_sessions ts ON ts.id = ta.training_session_id
+        WHERE ta.player_id = :player_id
+          AND ts.session_date::date BETWEEN :load_date_from AND :date_to
+          AND ta.status = 'present'
+          AND ta.rpe_post IS NOT NULL
+          AND ta.minutes IS NOT NULL
+        GROUP BY ts.session_date::date
+        ORDER BY ts.session_date::date ASC
+    """)
+    
+    load_result = await session.execute(
+        load_query,
+        {"player_id": player_id, "load_date_from": load_date_from, "date_to": date_to}
+    )
+    daily_srpe = [(row[0], float(row[1])) for row in load_result.fetchall()]
+    
+    # Calculate ACWR series
+    acwr_series = calculate_acwr_rolling(daily_srpe, 7, 28)
+    
+    # Get readiness data
+    readiness_endpoint = await get_player_readiness(
+        player_id=player_id,
+        date_from=date_from,
+        date_to=date_to,
+        session=session,
+    )
+    readiness_series = [(r.date, r.readiness) for r in readiness_endpoint.series]
+    
+    # Get wellness data for outlier detection (extend back 28 days for baseline)
+    wellness_date_from = date_from - timedelta(days=28)
+    wellness_query = text("""
+        SELECT
+            ws.date,
+            MAX(CASE WHEN wm.metric_key = 'resting_hr_bpm' THEN wm.metric_value END) AS resting_hr_bpm,
+            MAX(CASE WHEN wm.metric_key = 'hrv_ms' THEN wm.metric_value END) AS hrv_ms,
+            MAX(CASE WHEN wm.metric_key = 'soreness' THEN wm.metric_value END) AS soreness,
+            MAX(CASE WHEN wm.metric_key = 'mood' THEN wm.metric_value END) AS mood
+        FROM wellness_sessions ws
+        LEFT JOIN wellness_metrics wm ON wm.wellness_session_id = ws.id
+        WHERE ws.player_id = :player_id
+          AND ws.date BETWEEN :wellness_date_from AND :date_to
+          AND wm.validity = 'valid'
+        GROUP BY ws.date
+        ORDER BY ws.date ASC
+    """)
+    
+    wellness_result = await session.execute(
+        wellness_query,
+        {
+            "player_id": player_id,
+            "wellness_date_from": wellness_date_from,
+            "date_to": date_to,
+        }
+    )
+    wellness_data = []
+    for row in wellness_result.fetchall():
+        d = row[0]
+        metrics = {
+            'resting_hr_bpm': float(row[1]) if row[1] is not None else None,
+            'hrv_ms': float(row[2]) if row[2] is not None else None,
+            'soreness': float(row[3]) if row[3] is not None else None,
+            'mood': float(row[4]) if row[4] is not None else None,
+        }
+        wellness_data.append((d, metrics))
+    
+    # Calculate baseline for outlier detection
+    baseline = calculate_baseline_28d(wellness_data, date_to)
+    
+    # Generate alerts
+    alerts = generate_alerts(
+        acwr_series,
+        readiness_series,
+        wellness_data,
+        baseline,
+        date_from,
+        date_to
+    )
+    
+    # Format alerts
+    alerts_formatted = [AlertResponse(**alert.to_dict()) for alert in alerts]
+    
+    return AlertsResponse(
+        player_id=player_id,
+        date_from=date_from,
+        date_to=date_to,
+        alerts=alerts_formatted,
     )
