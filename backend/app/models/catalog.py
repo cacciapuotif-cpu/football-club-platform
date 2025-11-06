@@ -1,6 +1,12 @@
 """
 Metric catalog and data quality models.
 Provides metadata for all metrics and tracks data quality issues.
+
+Tassonomia ufficiale:
+- wellness: sleep, fatigue, stress, mood, hydration, physical markers
+- training: load, intensity, movement, heart rate
+- match: passing, duels, actions, shots
+- tactical: pressures, recoveries, progressive passes, line breaking, xthreat
 """
 
 from datetime import datetime
@@ -10,25 +16,35 @@ from uuid import UUID, uuid4
 from sqlmodel import Column, DateTime, Field, SQLModel
 from sqlalchemy import func
 
+if TYPE_CHECKING:
+    pass
+
 
 class MetricCatalog(SQLModel, table=True):
     """
     Catalog of all available metrics with metadata.
     Used for validation, unit conversion, and direction interpretation.
+    
+    Tassonomia ufficiale con 4 famiglie:
+    - wellness: sleep, fatigue, stress, mood, hydration, physical
+    - training: load, intensity, movement, heart rate
+    - match: passing, duels, actions, shots
+    - tactical: pressures, recoveries, progressive passes, line breaking, xthreat
     """
 
     __tablename__ = "metric_catalog"
 
     metric_key: str = Field(primary_key=True, max_length=100)  # e.g., 'sleep_quality', 'hsr'
 
-    # Metadata
-    area: str | None = Field(default=None, max_length=50)  # wellness, training, match, physical_test
+    # Tassonomia
+    area: str | None = Field(default=None, max_length=50)  # wellness, training, match, tactical
+    family: str | None = Field(default=None, max_length=50)  # Alias per area (per coerenza con API)
     description: str | None = Field(default=None, max_length=500)
-    unit_default: str | None = Field(default=None, max_length=50)  # score, m, km, bpm, kg, etc.
+    unit_default: str | None = Field(default=None, max_length=50)  # score, m, km, bpm, kg, ms, %, #
 
     # Validation ranges
-    min_value: float | None = Field(default=None, alias="min")
-    max_value: float | None = Field(default=None, alias="max")
+    min_value: float | None = Field(default=None)
+    max_value: float | None = Field(default=None)
 
     # Interpretation
     direction: str | None = Field(default=None, max_length=50)  # up_is_better, down_is_better, neutral
@@ -62,11 +78,11 @@ class DataQualityLog(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
 
     # Entity reference (generic)
-    entity_type: str = Field(max_length=100, alias="entity")  # wellness_metric, training_metric, match_metric
+    entity_type: str = Field(max_length=100)  # wellness_metric, training_metric, match_metric
     entity_id: UUID  # ID of the problematic entity
 
     # Issue details
-    issue_type: str = Field(max_length=100, alias="issue")  # out_of_range, missing_data, duplicate, outlier
+    issue_type: str = Field(max_length=100)  # out_of_range, missing_data, duplicate, outlier
     issue_details: str | None = Field(default=None, max_length=500)  # additional context
 
     # Severity

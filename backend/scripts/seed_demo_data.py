@@ -132,62 +132,61 @@ async def seed_season_and_team(session: AsyncSession, org: Organization):
 
 
 async def seed_players(session: AsyncSession, team: Team, org: Organization):
-    """Create 25 players if not exist."""
+    """Create 2 players (GK and CM) if not exist."""
     print("👥 Creating players...")
 
-    # Check existing players for this team
+    # Check existing players for this team with specific external_ids
     result = await session.execute(
-        text("SELECT COUNT(*) FROM players WHERE team_id = :team_id"),
+        text("SELECT id FROM players WHERE team_id = :team_id AND external_id IN ('DEMO_GK_01', 'DEMO_CM_01')"),
         {"team_id": team.id}
     )
-    existing_count = result.scalar()
-
-    if existing_count >= 25:
-        print(f"   ℹ️  Team already has {existing_count} players, skipping...")
-        # Return existing players
-        result = await session.execute(
-            text("SELECT id FROM players WHERE team_id = :team_id LIMIT 25"),
-            {"team_id": team.id}
-        )
-        player_ids = [row[0] for row in result.fetchall()]
+    existing_players = result.fetchall()
+    
+    if len(existing_players) >= 2:
+        print(f"   ℹ️  Players already exist, using existing...")
         players = []
-        for pid in player_ids:
-            p = await session.get(Player, pid)
+        for row in existing_players:
+            p = await session.get(Player, row[0])
             players.append(p)
         return players
 
-    roles = ["GK", "DF", "MF", "FW"]
-    first_names = ["Marco", "Luca", "Andrea", "Francesco", "Matteo", "Alessandro", "Lorenzo", "Davide", "Simone", "Gabriele",
-                   "Riccardo", "Filippo", "Tommaso", "Giovanni", "Antonio", "Giuseppe", "Paolo", "Stefano", "Roberto", "Daniele",
-                   "Federico", "Nicola", "Michele", "Alessio", "Cristian"]
-    last_names = ["Rossi", "Bianchi", "Verdi", "Ferrari", "Romano", "Colombo", "Ricci", "Marino", "Greco", "Bruno",
-                  "Gallo", "Conti", "De Luca", "Mancini", "Costa", "Giordano", "Rizzo", "Lombardi", "Moretti", "Barbieri",
-                  "Fontana", "Santoro", "Mariani", "Rinaldi", "Caruso"]
-
-    players = []
-    for i in range(25):
-        role = roles[i % len(roles)]  # Distribute roles evenly
-        dob = date(2008, 1, 1) + timedelta(days=random.randint(0, 365))  # Born in 2008
-
-        player = Player(
-            id=uuid4(),
-            external_id=f"DEMO_U17_{i+1:02d}",
-            first_name=first_names[i],
-            last_name=last_names[i % len(last_names)],
-            date_of_birth=dob,
-            nationality="IT",
-            role_primary=role,
-            height_cm=165 + random.randint(0, 25),
-            weight_kg=55 + random.randint(0, 20),
-            jersey_number=i + 1,
-            organization_id=org.id,
-            team_id=team.id,
-        )
-        session.add(player)
-        players.append(player)
-
+    # Create GK (Goalkeeper)
+    gk = Player(
+        id=uuid4(),
+        external_id="DEMO_GK_01",
+        first_name="Marco",
+        last_name="Rossi",
+        date_of_birth=date(2008, 3, 15),
+        nationality="IT",
+        role_primary="GK",
+        height_cm=185,
+        weight_kg=78,
+        jersey_number=1,
+        organization_id=org.id,
+        team_id=team.id,
+    )
+    session.add(gk)
+    
+    # Create CM (Central Midfielder)
+    cm = Player(
+        id=uuid4(),
+        external_id="DEMO_CM_01",
+        first_name="Luca",
+        last_name="Bianchi",
+        date_of_birth=date(2008, 7, 22),
+        nationality="IT",
+        role_primary="MF",
+        height_cm=175,
+        weight_kg=68,
+        jersey_number=8,
+        organization_id=org.id,
+        team_id=team.id,
+    )
+    session.add(cm)
+    
     await session.flush()
-    print(f"   ✅ Created {len(players)} players")
+    players = [gk, cm]
+    print(f"   ✅ Created {len(players)} players: GK (Marco Rossi) and CM (Luca Bianchi)")
     return players
 
 
@@ -243,15 +242,17 @@ async def seed_wellness_data(session: AsyncSession, players: list[Player], org: 
                 base_doms += random.uniform(0.5, 1.5)
 
             metrics_data = [
-                ("sleep_quality", min(max(base_sleep + random.uniform(-0.5, 0.5), 1), 10), "score"),
                 ("sleep_hours", min(max(base_sleep - 1 + random.uniform(-0.5, 0.5), 4), 12), "hours"),
-                ("stress", min(max(base_stress + random.uniform(-1.0, 1.0), 1), 10), "score"),
+                ("sleep_quality", min(max(base_sleep + random.uniform(-0.5, 0.5), 1), 10), "score"),
                 ("fatigue", min(max(base_fatigue + random.uniform(-1.0, 1.0), 1), 10), "score"),
-                ("doms", min(max(base_doms + random.uniform(-0.5, 0.5), 1), 10), "score"),
+                ("soreness", min(max(base_doms + random.uniform(-0.5, 0.5), 1), 10), "score"),
+                ("stress", min(max(base_stress + random.uniform(-1.0, 1.0), 1), 10), "score"),
                 ("mood", min(max(base_mood + random.uniform(-1.0, 1.0), 1), 10), "score"),
                 ("motivation", min(max(random.uniform(6.0, 9.0), 1), 10), "score"),
                 ("hydration", random.randint(6, 9), "score"),
-                ("rpe_morning", random.randint(2, 5), "score"),
+                ("body_weight_kg", round(70 + random.uniform(-2, 2), 1), "kg"),
+                ("resting_hr_bpm", random.randint(50, 65), "bpm"),
+                ("hrv_ms", random.randint(40, 80), "ms"),
             ]
 
             for metric_key, value, unit in metrics_data:
@@ -363,7 +364,7 @@ async def seed_training_sessions(session: AsyncSession, team: Team, players: lis
 
 
 async def seed_matches(session: AsyncSession, team: Team, players: list[Player], org: Organization):
-    """Create 8 matches with player stats and metrics."""
+    """Create 6 matches with player stats and metrics."""
     print("⚽ Creating matches with player stats...")
 
     today = date.today()
@@ -375,7 +376,7 @@ async def seed_matches(session: AsyncSession, team: Team, players: list[Player],
     )
     existing_count = result.scalar()
 
-    if existing_count >= 8:
+    if existing_count >= 6:
         print(f"   ℹ️  Matches already seeded ({existing_count}), skipping...")
         return
 
@@ -383,10 +384,10 @@ async def seed_matches(session: AsyncSession, team: Team, players: list[Player],
     total_attendances = 0
     total_metrics = 0
 
-    opponents = ["Juventus U17", "Milan U17", "Inter U17", "Roma U17", "Napoli U17", "Lazio U17", "Fiorentina U17", "Atalanta U17"]
+    opponents = ["Juventus U17", "Milan U17", "Inter U17", "Roma U17", "Napoli U17", "Lazio U17"]
     results = ["WIN", "DRAW", "LOSS"]
 
-    for i in range(8):
+    for i in range(6):
         days_ago = random.randint(7, 80)
         match_date = datetime.combine(today - timedelta(days=days_ago), datetime.min.time())
 
@@ -452,15 +453,39 @@ async def seed_matches(session: AsyncSession, team: Team, players: list[Player],
             duels_won = random.randint(3, 20)
             touches = random.randint(30, 100)
 
+            # Match metrics
             metrics_data = [
-                ("sprint_count", sprint_count, "#"),
-                ("hsr", hsr, "m"),
-                ("total_distance", total_distance, "km"),
                 ("pass_accuracy", pass_accuracy, "%"),
-                ("pass_completed", pass_completed, "#"),
+                ("passes_completed", pass_completed, "#"),
                 ("duels_won", duels_won, "#"),
                 ("touches", touches, "#"),
+                ("dribbles_success", random.randint(0, 8), "#"),
+                ("interceptions", random.randint(0, 5), "#"),
+                ("tackles", random.randint(0, 6), "#"),
+                ("shots_on_target", random.randint(0, 3), "#"),
             ]
+            
+            # Tactical metrics (placeholder realistic values)
+            if player.role_primary == "GK":
+                # GK specific: more recoveries, fewer progressive passes
+                tactical_metrics = [
+                    ("pressures", random.randint(5, 15), "#"),
+                    ("recoveries_def_third", random.randint(8, 20), "#"),
+                    ("progressive_passes", random.randint(2, 8), "#"),
+                    ("line_breaking_passes_conceded", random.randint(0, 3), "#"),
+                    ("xthreat_contrib", round(random.uniform(0.1, 0.5), 2), "score"),
+                ]
+            else:
+                # CM/field player: more progressive passes, pressures
+                tactical_metrics = [
+                    ("pressures", random.randint(15, 35), "#"),
+                    ("recoveries_def_third", random.randint(2, 10), "#"),
+                    ("progressive_passes", random.randint(8, 25), "#"),
+                    ("line_breaking_passes_conceded", random.randint(1, 5), "#"),
+                    ("xthreat_contrib", round(random.uniform(0.3, 1.2), 2), "score"),
+                ]
+            
+            metrics_data.extend(tactical_metrics)
 
             for metric_key, value, unit in metrics_data:
                 mm = MatchMetric(
@@ -515,6 +540,15 @@ async def main():
 
             await seed_matches(session, team, players, org)
 
+            # Get summary counts
+            wellness_result = await session.execute(text("SELECT COUNT(*) FROM wellness_metrics"))
+            training_result = await session.execute(text("SELECT COUNT(*) FROM training_metrics"))
+            match_result = await session.execute(text("SELECT COUNT(*) FROM match_metrics"))
+            wellness_count = wellness_result.scalar() or 0
+            training_count = training_result.scalar() or 0
+            match_count = match_result.scalar() or 0
+            total_eav = wellness_count + training_count + match_count
+            
             print("=" * 60)
             print("✅ SEEDING COMPLETE!")
             print("=" * 60)
@@ -522,13 +556,19 @@ async def main():
             print(f"Season: {season.name}")
             print(f"Team: {team.name} ({len(players)} players)")
             print("")
+            print("📊 Summary by family:")
+            print(f"   Wellness metrics: {wellness_count}")
+            print(f"   Training metrics: {training_count}")
+            print(f"   Match metrics: {match_count}")
+            print(f"   Total EAV records: {total_eav}")
+            print("")
             print("Next steps:")
             print("1. Start the API: make up (or docker compose up)")
             print("2. Test endpoints:")
-            print(f"   GET /api/v1/players/{players[0].id}/progress?from=2025-01-01&to=2025-12-31&metrics=sleep_quality,stress,fatigue&groupby=week")
-            print(f"   GET /api/v1/players/{players[0].id}/training-load?from=2025-01-01&to=2025-12-31")
-            print(f"   GET /api/v1/players/{players[0].id}/overview?period=30d")
-            print(f"   POST /api/v1/progress-ml/players/{players[0].id}/predict-risk")
+            print(f"   GET /api/v1/players/{players[0].id}/overview?period=28d")
+            print(f"   GET /api/v1/players/{players[0].id}/progress?families=wellness,training&grouping=week")
+            print(f"   GET /api/v1/players/{players[0].id}/training-load?window_short=7&window_long=28")
+            print(f"   GET /api/v1/players/{players[0].id}/match-summary?date_from={date.today() - timedelta(days=90)}")
             print("=" * 60)
 
         except Exception as e:

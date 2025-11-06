@@ -58,7 +58,7 @@ class ProgressResponse(BaseModel):
 class TrainingLoadPoint(BaseModel):
     """Single point in training load series."""
     date: date
-    srpe: float
+    srpe: float  # Raw daily sRPE
     acute: Optional[float] = None
     chronic: Optional[float] = None
     acwr: Optional[float] = None
@@ -67,36 +67,48 @@ class TrainingLoadPoint(BaseModel):
 class TrainingLoadResponse(BaseModel):
     """Response for training-load endpoint."""
     series: list[TrainingLoadPoint]
-    acute_days: int
-    chronic_days: int
+    window_short: int
+    window_long: int
     flags: list[dict] = []
+
+
+class FamilyCompleteness(BaseModel):
+    """Completeness data for a metric family."""
+    family: str
+    completeness_pct: float
+    days_with_data: int
+    total_days: int
 
 
 class PlayerOverviewResponse(BaseModel):
     """Response for overview endpoint."""
-    window_days: int
-    wellness_days_with_data: int
-    wellness_completeness_pct: float
-    last_values: dict[str, Optional[float]]
+    player_id: UUID
+    period_days: int
+    wellness_entries: int
     training_sessions: int
-    present_count: int
-    avg_srpe_last_7d: Optional[float] = None
-    avg_srpe_last_28d: Optional[float] = None
+    matches: int
+    wellness_completeness_pct: float
+    training_completeness_pct: float
+    match_completeness_pct: float
+    family_completeness: list[FamilyCompleteness]
+    metric_summaries: list[dict]
+    data_quality_issues: int = 0
 
 
 @router.get("/players/{player_id}/progress", response_model=ProgressResponse)
 async def get_player_progress(
     player_id: UUID,
-    bucket: Literal["daily", "weekly", "monthly"] = Query("weekly"),
+    grouping: Literal["day", "week", "month"] = Query("week", alias="grouping"),
     date_from: Optional[date] = Query(None, alias="date_from"),
     date_to: Optional[date] = Query(None, alias="date_to"),
+    families: Optional[str] = Query(None, description="Comma-separated family names (wellness, training, match, tactical)"),
     metrics: Optional[str] = Query(None, description="Comma-separated metric keys"),
     session: AsyncSession = Depends(get_session),
 ):
     """
     Get player progress metrics aggregated by time bucket.
     
-    Returns wellness metrics and sRPE with delta vs previous bucket.
+    Returns EAV metrics grouped by time period with flexible family filtering.
     """
     # Default date range: last 90 days
     if date_to is None:
@@ -104,58 +116,150 @@ async def get_player_progress(
     if date_from is None:
         date_from = date_to - timedelta(days=90)
     
-    # Parse metrics or use defaults
+    # Map grouping to SQL date_trunc and bucket name
+    grouping_map = {
+        "day": ("day", "daily"),
+        "week": ("week", "weekly"),
+        "month": ("month", "monthly")
+    }
+    bucket_sql, bucket_name = grouping_map.get(grouping, ("week", "weekly"))
+    
+    # Determine which families to query
+    if families:
+        family_list = [f.strip().lower() for f in families.split(",")]
+    else:
+        family_list = ["wellness", "training", "match", "tactical"]
+    
+    # Parse metrics or use defaults based on families
     if metrics:
         metric_list = [m.strip() for m in metrics.split(",")]
     else:
-        metric_list = DEFAULT_WELLNESS_METRICS
+        metric_list = []
+        if "wellness" in family_list:
+            metric_list.extend(DEFAULT_WELLNESS_METRICS)
+        if "training" in family_list:
+            metric_list.extend(DEFAULT_TRAINING_METRICS)
+        if "match" in family_list:
+            metric_list.extend(DEFAULT_MATCH_METRICS)
+        if "tactical" in family_list:
+            metric_list.extend(["pressures", "recoveries_def_third", "progressive_passes", "line_breaking_passes_conceded", "xthreat_contrib"])
     
-    # Map bucket to SQL date_trunc
-    bucket_map = {
-        "daily": "day",
-        "weekly": "week",
-        "monthly": "month"
-    }
-    bucket_sql = bucket_map[bucket]
+    # Build UNION query for all EAV sources
+    all_queries = []
     
-    # Build dynamic query for selected metrics
-    metric_cases = []
-    for metric in metric_list:
-        metric_cases.append(
-            f"AVG(CASE WHEN wm.metric_key = '{metric}' THEN wm.metric_value END) AS {metric}"
+    # Wellness metrics
+    if "wellness" in family_list:
+        wellness_metrics = [m for m in metric_list if m in DEFAULT_WELLNESS_METRICS]
+        if wellness_metrics:
+            metric_cases = []
+            for metric in metric_list:
+                metric_cases.append(
+                    f"AVG(CASE WHEN metric_key = '{metric}' THEN metric_value END) AS {metric}"
+                )
+            metrics_select = ",\n                ".join(metric_cases)
+            all_queries.append(f"""
+                SELECT
+                    DATE_TRUNC('{bucket_sql}', date::timestamp)::date AS bucket_start,
+                    {metrics_select}
+                FROM (
+                    SELECT ws.date, wm.metric_key, wm.metric_value
+                    FROM wellness_sessions ws
+                    JOIN wellness_metrics wm ON wm.wellness_session_id = ws.id
+                    WHERE ws.player_id = :player_id
+                      AND ws.date BETWEEN :date_from AND :date_to
+                      AND wm.metric_key = ANY(:metric_list)
+                      AND wm.validity = 'valid'
+                ) wellness_data
+                GROUP BY bucket_start
+            """)
+    
+    # Training metrics
+    if "training" in family_list:
+        training_metrics = [m for m in metric_list if m in DEFAULT_TRAINING_METRICS]
+        if training_metrics:
+            metric_cases = []
+            for metric in metric_list:
+                metric_cases.append(
+                    f"AVG(CASE WHEN metric_key = '{metric}' THEN metric_value END) AS {metric}"
+                )
+            metrics_select = ",\n                ".join(metric_cases)
+            all_queries.append(f"""
+                SELECT
+                    DATE_TRUNC('{bucket_sql}', session_date::timestamp)::date AS bucket_start,
+                    {metrics_select}
+                FROM (
+                    SELECT ts.session_date::date AS session_date, tm.metric_key, tm.metric_value
+                    FROM training_attendance ta
+                    JOIN training_sessions ts ON ts.id = ta.training_session_id
+                    LEFT JOIN training_metrics tm ON tm.training_attendance_id = ta.id
+                    WHERE ta.player_id = :player_id
+                      AND ts.session_date::date BETWEEN :date_from AND :date_to
+                      AND ta.status = 'present'
+                      AND (tm.metric_key = ANY(:metric_list) OR tm.metric_key IS NULL)
+                      AND (tm.validity = 'valid' OR tm.validity IS NULL)
+                ) training_data
+                GROUP BY bucket_start
+            """)
+    
+    # Match metrics
+    if "match" in family_list or "tactical" in family_list:
+        match_metrics = [m for m in metric_list if m in DEFAULT_MATCH_METRICS or m.startswith(('pressures', 'recoveries', 'progressive', 'line_breaking', 'xthreat'))]
+        if match_metrics:
+            metric_cases = []
+            for metric in metric_list:
+                metric_cases.append(
+                    f"AVG(CASE WHEN metric_key = '{metric}' THEN metric_value END) AS {metric}"
+                )
+            metrics_select = ",\n                ".join(metric_cases)
+            all_queries.append(f"""
+                SELECT
+                    DATE_TRUNC('{bucket_sql}', match_date::timestamp)::date AS bucket_start,
+                    {metrics_select}
+                FROM (
+                    SELECT m.match_date::date AS match_date, mm.metric_key, mm.metric_value
+                    FROM attendances a
+                    JOIN matches m ON m.id = a.match_id
+                    LEFT JOIN match_metrics mm ON mm.attendance_id = a.id
+                    WHERE a.player_id = :player_id
+                      AND m.match_date::date BETWEEN :date_from AND :date_to
+                      AND (mm.metric_key = ANY(:metric_list) OR mm.metric_key IS NULL)
+                      AND (mm.validity = 'valid' OR mm.validity IS NULL)
+                ) match_data
+                GROUP BY bucket_start
+            """)
+    
+    # Combine all queries with UNION ALL and aggregate
+    if not all_queries:
+        # No families selected, return empty
+        return ProgressResponse(
+            bucket=bucket_name,
+            date_from=date_from,
+            date_to=date_to,
+            series=[],
         )
     
-    metrics_select = ",\n            ".join(metric_cases)
-    
-    # Query wellness metrics by bucket
-    wellness_query = text(f"""
-        WITH wellness_buckets AS (
-            SELECT
-                DATE_TRUNC(:bucket_sql, ws.date::timestamp)::date AS bucket_start,
-                {metrics_select}
-            FROM wellness_sessions ws
-            JOIN wellness_metrics wm ON wm.wellness_session_id = ws.id
-            WHERE ws.player_id = :player_id
-              AND ws.date BETWEEN :date_from AND :date_to
-              AND wm.metric_key = ANY(:metric_list)
-              AND wm.validity = 'valid'
-            GROUP BY bucket_start
+    combined_query = f"""
+        WITH all_metrics AS (
+            {' UNION ALL '.join(all_queries)}
         )
-        SELECT * FROM wellness_buckets
+        SELECT
+            bucket_start,
+            {', '.join([f'AVG({m}) AS {m}' for m in metric_list])}
+        FROM all_metrics
+        GROUP BY bucket_start
         ORDER BY bucket_start ASC
-    """)
+    """
     
-    wellness_result = await session.execute(
-        wellness_query,
+    result = await session.execute(
+        text(combined_query),
         {
-            "bucket_sql": bucket_sql,
             "player_id": player_id,
             "date_from": date_from,
             "date_to": date_to,
             "metric_list": metric_list,
         }
     )
-    wellness_rows = wellness_result.fetchall()
+    rows = result.fetchall()
     
     # Query sRPE by bucket
     srpe_query = text(f"""
@@ -191,18 +295,18 @@ async def get_player_progress(
     )
     srpe_rows = {row[0]: float(row[1]) for row in srpe_result.fetchall()}
     
-    # Combine wellness and sRPE data, calculate deltas
+    # Combine metrics and sRPE data, calculate deltas
     series = []
     prev_bucket_data = None
     
-    for row in wellness_rows:
+    for row in rows:
         bucket_start = row[0]
         bucket_data = {
             "bucket_start": bucket_start,
             "srpe": srpe_rows.get(bucket_start),
         }
         
-        # Add wellness metrics (columns 1+)
+        # Add metrics (columns 1+)
         for i, metric in enumerate(metric_list, start=1):
             bucket_data[metric] = float(row[i]) if row[i] is not None else None
         
@@ -237,21 +341,21 @@ async def get_player_progress(
 @router.get("/players/{player_id}/training-load", response_model=TrainingLoadResponse)
 async def get_training_load(
     player_id: UUID,
-    acute_days: int = Query(7, ge=1, le=14),
-    chronic_days: int = Query(28, ge=7, le=56),
+    window_short: int = Query(7, ge=1, le=14, description="Short window for acute load (days)"),
+    window_long: int = Query(28, ge=7, le=56, description="Long window for chronic load (days)"),
     session: AsyncSession = Depends(get_session),
 ):
     """
     Get training load with ACWR (Acute:Chronic Workload Ratio).
     
-    - sRPE = RPE * minutes per day
-    - acute = rolling average of last N days
-    - chronic = rolling average of last M days
+    - sRPE = RPE * minutes per day (raw daily values returned)
+    - acute = rolling average of last window_short days
+    - chronic = rolling average of last window_long days
     - ACWR = acute / chronic
     - Flags: high if ACWR > 1.5, low if ACWR < 0.8
     """
-    # Get daily sRPE for last chronic_days + buffer
-    date_from = date.today() - timedelta(days=chronic_days + 7)
+    # Get daily sRPE for last window_long + buffer
+    date_from = date.today() - timedelta(days=window_long + 7)
     date_to = date.today()
     
     query = text("""
@@ -307,10 +411,10 @@ async def get_training_load(
         ORDER BY date ASC
     """)
     
-    acute_rows = acute_days - 1  # ROWS BETWEEN is inclusive
-    chronic_rows = chronic_days - 1
-    min_acute_rows = max(acute_days - 2, 1)  # Allow some missing days
-    min_chronic_rows = max(chronic_days - 5, 1)
+    acute_rows = window_short - 1  # ROWS BETWEEN is inclusive
+    chronic_rows = window_long - 1
+    min_acute_rows = max(window_short - 2, 1)  # Allow some missing days
+    min_chronic_rows = max(window_long - 5, 1)
     
     result = await session.execute(
         query,
@@ -322,7 +426,7 @@ async def get_training_load(
             "chronic_rows": chronic_rows,
             "min_acute_rows": min_acute_rows,
             "min_chronic_rows": min_chronic_rows,
-            "chronic_days": chronic_days,
+            "chronic_days": window_long,
         }
     )
     
@@ -362,8 +466,8 @@ async def get_training_load(
     
     return TrainingLoadResponse(
         series=series,
-        acute_days=acute_days,
-        chronic_days=chronic_days,
+        window_short=window_short,
+        window_long=window_long,
         flags=flags,
     )
 
@@ -496,15 +600,97 @@ async def get_player_overview(
     )
     avg_srpe_last_28d = float(srpe_28d_result.scalar() or 0)
     
+    # Calculate completeness per family
+    family_completeness = []
+    
+    # Wellness completeness
+    family_completeness.append(FamilyCompleteness(
+        family="wellness",
+        completeness_pct=wellness_completeness_pct,
+        days_with_data=wellness_days_with_data,
+        total_days=window_days,
+    ))
+    
+    # Training completeness
+    training_completeness_pct = round((training_sessions / max(window_days // 3, 1)) * 100, 1) if window_days > 0 else 0  # Approx 3 sessions per week
+    family_completeness.append(FamilyCompleteness(
+        family="training",
+        completeness_pct=min(training_completeness_pct, 100.0),
+        days_with_data=training_sessions,
+        total_days=window_days,
+    ))
+    
+    # Match completeness
+    match_query = text("""
+        SELECT COUNT(DISTINCT m.id)::int
+        FROM attendances a
+        JOIN matches m ON m.id = a.match_id
+        WHERE a.player_id = :player_id
+          AND m.match_date::date >= :date_from
+    """)
+    match_result = await session.execute(
+        match_query,
+        {"player_id": player_id, "date_from": date_from}
+    )
+    matches = match_result.scalar() or 0
+    match_completeness_pct = round((matches / max(window_days // 7, 1)) * 100, 1) if window_days > 0 else 0  # Approx 1 match per week
+    family_completeness.append(FamilyCompleteness(
+        family="match",
+        completeness_pct=min(match_completeness_pct, 100.0),
+        days_with_data=matches,
+        total_days=window_days,
+    ))
+    
+    # Metric summaries (last values with basic stats)
+    metric_summaries = []
+    for metric_key, metric_value in last_values.items():
+        if metric_value is not None:
+            # Get avg, min, max for this metric in the period
+            stats_query = text("""
+                SELECT
+                    AVG(metric_value) AS avg_val,
+                    MIN(metric_value) AS min_val,
+                    MAX(metric_value) AS max_val,
+                    COUNT(*) AS count
+                FROM wellness_metrics wm
+                JOIN wellness_sessions ws ON ws.id = wm.wellness_session_id
+                WHERE ws.player_id = :player_id
+                  AND ws.date >= :date_from
+                  AND wm.metric_key = :metric_key
+                  AND wm.validity = 'valid'
+            """)
+            stats_result = await session.execute(
+                stats_query,
+                {"player_id": player_id, "date_from": date_from, "metric_key": metric_key}
+            )
+            stats_row = stats_result.fetchone()
+            if stats_row and stats_row[3] > 0:  # count > 0
+                metric_summaries.append({
+                    "metric_key": metric_key,
+                    "current_value": metric_value,
+                    "avg_value": round(float(stats_row[0]), 2),
+                    "min_value": round(float(stats_row[1]), 2),
+                    "max_value": round(float(stats_row[2]), 2),
+                    "completeness_pct": round((stats_row[3] / window_days) * 100, 1),
+                    "trend_pct": 0.0,  # Placeholder
+                    "variance": round(float(stats_row[2]) - float(stats_row[1]), 2) if stats_row[2] and stats_row[1] else 0.0,
+                })
+    
+    # Data quality issues count (placeholder)
+    data_quality_issues = 0
+    
     return PlayerOverviewResponse(
-        window_days=window_days,
-        wellness_days_with_data=wellness_days_with_data,
-        wellness_completeness_pct=wellness_completeness_pct,
-        last_values=last_values,
+        player_id=player_id,
+        period_days=window_days,
+        wellness_entries=wellness_days_with_data,
         training_sessions=training_sessions,
-        present_count=present_count,
-        avg_srpe_last_7d=avg_srpe_last_7d if avg_srpe_last_7d > 0 else None,
-        avg_srpe_last_28d=avg_srpe_last_28d if avg_srpe_last_28d > 0 else None,
+        matches=matches,
+        wellness_completeness_pct=wellness_completeness_pct,
+        training_completeness_pct=min(training_completeness_pct, 100.0),
+        match_completeness_pct=min(match_completeness_pct, 100.0),
+        family_completeness=family_completeness,
+        metric_summaries=metric_summaries,
+        data_quality_issues=data_quality_issues,
     )
 
 
@@ -520,100 +706,18 @@ async def get_training_metrics(
     """
     Get training metrics aggregated by time bucket.
     
+    Alias for /progress with families=training.
     Returns training metrics (HSR, distance, sprints, HR, etc.) with delta vs previous bucket.
     """
-    # Default date range: last 90 days
-    if date_to is None:
-        date_to = date.today()
-    if date_from is None:
-        date_from = date_to - timedelta(days=90)
-    
-    # Parse metrics or use defaults
-    if metrics:
-        metric_list = [m.strip() for m in metrics.split(",")]
-    else:
-        metric_list = DEFAULT_TRAINING_METRICS
-    
-    # Map bucket to SQL date_trunc
-    bucket_map = {
-        "daily": "day",
-        "weekly": "week",
-        "monthly": "month"
-    }
-    bucket_sql = bucket_map[bucket]
-    
-    # Build dynamic query for selected metrics
-    metric_cases = []
-    for metric in metric_list:
-        metric_cases.append(
-            f"AVG(CASE WHEN tm.metric_key = '{metric}' THEN tm.metric_value END) AS {metric}"
-        )
-    
-    metrics_select = ",\n            ".join(metric_cases)
-    
-    # Query training metrics by bucket
-    training_query = text(f"""
-        WITH training_buckets AS (
-            SELECT
-                DATE_TRUNC(:bucket_sql, ts.session_date::timestamp)::date AS bucket_start,
-                {metrics_select}
-            FROM training_attendance ta
-            JOIN training_sessions ts ON ts.id = ta.training_session_id
-            LEFT JOIN training_metrics tm ON tm.training_attendance_id = ta.id
-            WHERE ta.player_id = :player_id
-              AND ts.session_date::date BETWEEN :date_from AND :date_to
-              AND ta.status = 'present'
-              AND (tm.metric_key = ANY(:metric_list) OR tm.metric_key IS NULL)
-              AND (tm.validity = 'valid' OR tm.validity IS NULL)
-            GROUP BY bucket_start
-        )
-        SELECT * FROM training_buckets
-        ORDER BY bucket_start ASC
-    """)
-    
-    training_result = await session.execute(
-        training_query,
-        {
-            "bucket_sql": bucket_sql,
-            "player_id": player_id,
-            "date_from": date_from,
-            "date_to": date_to,
-            "metric_list": metric_list,
-        }
-    )
-    training_rows = training_result.fetchall()
-    
-    # Combine data and calculate deltas
-    series = []
-    prev_bucket_data = None
-    
-    for row in training_rows:
-        bucket_start = row[0]
-        bucket_data = {"bucket_start": bucket_start}
-        
-        # Add training metrics (columns 1+)
-        for i, metric in enumerate(metric_list, start=1):
-            bucket_data[metric] = float(row[i]) if row[i] is not None else None
-        
-        # Calculate delta vs previous bucket
-        delta_prev_pct = {}
-        if prev_bucket_data:
-            for metric in metric_list:
-                curr_val = bucket_data.get(metric)
-                prev_val = prev_bucket_data.get(metric)
-                if curr_val is not None and prev_val is not None and prev_val != 0:
-                    delta_pct = ((curr_val - prev_val) / prev_val) * 100
-                    delta_prev_pct[metric] = round(delta_pct, 2)
-        
-        bucket_data["delta_prev_pct"] = delta_prev_pct if delta_prev_pct else None
-        series.append(ProgressSeriesPoint(**bucket_data))
-        prev_bucket_data = bucket_data
-    
-    return ProgressResponse(
-        bucket=bucket,
+    # Redirect to progress endpoint with families=training
+    return await get_player_progress(
+        player_id=player_id,
+        grouping="week" if bucket == "weekly" else ("day" if bucket == "daily" else "month"),
         date_from=date_from,
         date_to=date_to,
-        series=series,
+        families="training",
+        metrics=metrics,
+        session=session,
     )
 
 
@@ -629,7 +733,65 @@ async def get_match_metrics(
     """
     Get match performance metrics aggregated by time bucket.
     
+    Alias for /progress with families=match,tactical.
     Returns match metrics (pass accuracy, duels, touches, etc.) with delta vs previous bucket.
+    """
+    # Redirect to progress endpoint with families=match,tactical
+    return await get_player_progress(
+        player_id=player_id,
+        grouping="week" if bucket == "weekly" else ("day" if bucket == "daily" else "month"),
+        date_from=date_from,
+        date_to=date_to,
+        families="match,tactical",
+        metrics=metrics,
+        session=session,
+    )
+
+
+class MatchSummaryPoint(BaseModel):
+    """Single match summary point."""
+    match_id: UUID
+    match_date: date
+    opponent: str
+    is_home: bool
+    minutes_played: int
+    # Match metrics
+    pass_accuracy: Optional[float] = None
+    passes_completed: Optional[int] = None
+    duels_won: Optional[int] = None
+    touches: Optional[int] = None
+    dribbles_success: Optional[int] = None
+    interceptions: Optional[int] = None
+    tackles: Optional[int] = None
+    shots_on_target: Optional[int] = None
+    # Tactical metrics
+    pressures: Optional[int] = None
+    recoveries_def_third: Optional[int] = None
+    progressive_passes: Optional[int] = None
+    line_breaking_passes_conceded: Optional[int] = None
+    xthreat_contrib: Optional[float] = None
+
+
+class MatchSummaryResponse(BaseModel):
+    """Response for match-summary endpoint."""
+    player_id: UUID
+    date_from: date
+    date_to: date
+    matches: list[MatchSummaryPoint]
+    aggregates: dict
+
+
+@router.get("/players/{player_id}/match-summary", response_model=MatchSummaryResponse)
+async def get_match_summary(
+    player_id: UUID,
+    date_from: Optional[date] = Query(None, alias="date_from"),
+    date_to: Optional[date] = Query(None, alias="date_to"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Get match summary with aggregated match and tactical metrics.
+    
+    Returns per-match statistics and period aggregates.
     """
     # Default date range: last 90 days
     if date_to is None:
@@ -637,89 +799,85 @@ async def get_match_metrics(
     if date_from is None:
         date_from = date_to - timedelta(days=90)
     
-    # Parse metrics or use defaults
-    if metrics:
-        metric_list = [m.strip() for m in metrics.split(",")]
-    else:
-        metric_list = DEFAULT_MATCH_METRICS
-    
-    # Map bucket to SQL date_trunc
-    bucket_map = {
-        "daily": "day",
-        "weekly": "week",
-        "monthly": "month"
-    }
-    bucket_sql = bucket_map[bucket]
-    
-    # Build dynamic query for selected metrics
-    metric_cases = []
-    for metric in metric_list:
-        metric_cases.append(
-            f"AVG(CASE WHEN mm.metric_key = '{metric}' THEN mm.metric_value END) AS {metric}"
-        )
-    
-    metrics_select = ",\n            ".join(metric_cases)
-    
-    # Query match metrics by bucket
-    match_query = text(f"""
-        WITH match_buckets AS (
-            SELECT
-                DATE_TRUNC(:bucket_sql, m.match_date::timestamp)::date AS bucket_start,
-                {metrics_select}
-            FROM attendances a
-            JOIN matches m ON m.id = a.match_id
-            LEFT JOIN match_metrics mm ON mm.attendance_id = a.id
-            WHERE a.player_id = :player_id
-              AND m.match_date::date BETWEEN :date_from AND :date_to
-              AND (mm.metric_key = ANY(:metric_list) OR mm.metric_key IS NULL)
-              AND (mm.validity = 'valid' OR mm.validity IS NULL)
-            GROUP BY bucket_start
-        )
-        SELECT * FROM match_buckets
-        ORDER BY bucket_start ASC
+    # Query matches with metrics
+    query = text("""
+        SELECT
+            m.id AS match_id,
+            m.match_date::date AS match_date,
+            m.opponent_name AS opponent,
+            m.is_home,
+            a.minutes_played,
+            -- Match metrics
+            AVG(CASE WHEN mm.metric_key = 'pass_accuracy' THEN mm.metric_value END) AS pass_accuracy,
+            SUM(CASE WHEN mm.metric_key = 'passes_completed' THEN mm.metric_value::int END) AS passes_completed,
+            SUM(CASE WHEN mm.metric_key = 'duels_won' THEN mm.metric_value::int END) AS duels_won,
+            SUM(CASE WHEN mm.metric_key = 'touches' THEN mm.metric_value::int END) AS touches,
+            SUM(CASE WHEN mm.metric_key = 'dribbles_success' THEN mm.metric_value::int END) AS dribbles_success,
+            SUM(CASE WHEN mm.metric_key = 'interceptions' THEN mm.metric_value::int END) AS interceptions,
+            SUM(CASE WHEN mm.metric_key = 'tackles' THEN mm.metric_value::int END) AS tackles,
+            SUM(CASE WHEN mm.metric_key = 'shots_on_target' THEN mm.metric_value::int END) AS shots_on_target,
+            -- Tactical metrics
+            SUM(CASE WHEN mm.metric_key = 'pressures' THEN mm.metric_value::int END) AS pressures,
+            SUM(CASE WHEN mm.metric_key = 'recoveries_def_third' THEN mm.metric_value::int END) AS recoveries_def_third,
+            SUM(CASE WHEN mm.metric_key = 'progressive_passes' THEN mm.metric_value::int END) AS progressive_passes,
+            SUM(CASE WHEN mm.metric_key = 'line_breaking_passes_conceded' THEN mm.metric_value::int END) AS line_breaking_passes_conceded,
+            AVG(CASE WHEN mm.metric_key = 'xthreat_contrib' THEN mm.metric_value END) AS xthreat_contrib
+        FROM attendances a
+        JOIN matches m ON m.id = a.match_id
+        LEFT JOIN match_metrics mm ON mm.attendance_id = a.id
+        WHERE a.player_id = :player_id
+          AND m.match_date::date BETWEEN :date_from AND :date_to
+          AND (mm.validity = 'valid' OR mm.validity IS NULL)
+        GROUP BY m.id, m.match_date, m.opponent_name, m.is_home, a.minutes_played
+        ORDER BY m.match_date ASC
     """)
     
-    match_result = await session.execute(
-        match_query,
-        {
-            "bucket_sql": bucket_sql,
-            "player_id": player_id,
-            "date_from": date_from,
-            "date_to": date_to,
-            "metric_list": metric_list,
-        }
+    result = await session.execute(
+        query,
+        {"player_id": player_id, "date_from": date_from, "date_to": date_to}
     )
-    match_rows = match_result.fetchall()
+    rows = result.fetchall()
     
-    # Combine data and calculate deltas
-    series = []
-    prev_bucket_data = None
+    matches = []
+    for row in rows:
+        matches.append(MatchSummaryPoint(
+            match_id=row[0],
+            match_date=row[1],
+            opponent=row[2] or "Unknown",
+            is_home=row[3] if row[3] is not None else False,
+            minutes_played=int(row[4]) if row[4] else 0,
+            pass_accuracy=float(row[5]) if row[5] is not None else None,
+            passes_completed=int(row[6]) if row[6] is not None else None,
+            duels_won=int(row[7]) if row[7] is not None else None,
+            touches=int(row[8]) if row[8] is not None else None,
+            dribbles_success=int(row[9]) if row[9] is not None else None,
+            interceptions=int(row[10]) if row[10] is not None else None,
+            tackles=int(row[11]) if row[11] is not None else None,
+            shots_on_target=int(row[12]) if row[12] is not None else None,
+            pressures=int(row[13]) if row[13] is not None else None,
+            recoveries_def_third=int(row[14]) if row[14] is not None else None,
+            progressive_passes=int(row[15]) if row[15] is not None else None,
+            line_breaking_passes_conceded=int(row[16]) if row[16] is not None else None,
+            xthreat_contrib=float(row[17]) if row[17] is not None else None,
+        ))
     
-    for row in match_rows:
-        bucket_start = row[0]
-        bucket_data = {"bucket_start": bucket_start}
-        
-        # Add match metrics (columns 1+)
-        for i, metric in enumerate(metric_list, start=1):
-            bucket_data[metric] = float(row[i]) if row[i] is not None else None
-        
-        # Calculate delta vs previous bucket
-        delta_prev_pct = {}
-        if prev_bucket_data:
-            for metric in metric_list:
-                curr_val = bucket_data.get(metric)
-                prev_val = prev_bucket_data.get(metric)
-                if curr_val is not None and prev_val is not None and prev_val != 0:
-                    delta_pct = ((curr_val - prev_val) / prev_val) * 100
-                    delta_prev_pct[metric] = round(delta_pct, 2)
-        
-        bucket_data["delta_prev_pct"] = delta_prev_pct if delta_prev_pct else None
-        series.append(ProgressSeriesPoint(**bucket_data))
-        prev_bucket_data = bucket_data
+    # Calculate aggregates
+    if matches:
+        aggregates = {
+            "total_matches": len(matches),
+            "avg_minutes": round(sum(m.minutes_played for m in matches) / len(matches), 1),
+            "avg_pass_accuracy": round(sum(m.pass_accuracy for m in matches if m.pass_accuracy) / len([m for m in matches if m.pass_accuracy]), 1) if any(m.pass_accuracy for m in matches) else None,
+            "total_passes": sum(m.passes_completed for m in matches if m.passes_completed),
+            "total_duels_won": sum(m.duels_won for m in matches if m.duels_won),
+            "total_touches": sum(m.touches for m in matches if m.touches),
+        }
+    else:
+        aggregates = {}
     
-    return ProgressResponse(
-        bucket=bucket,
+    return MatchSummaryResponse(
+        player_id=player_id,
         date_from=date_from,
         date_to=date_to,
-        series=series,
+        matches=matches,
+        aggregates=aggregates,
     )
