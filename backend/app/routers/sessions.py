@@ -67,25 +67,40 @@ async def list_sessions(
     """
     # Get demo organization ID
     org_id = await get_demo_org_id(session)
-    query = select(TrainingSession).where(
-        TrainingSession.organization_id == org_id
-    )
+
+    # TEAM 3: Implement proper JOIN with PlayerSession for player_id filter
+    if player_id:
+        from app.models.player_session import PlayerSession
+        # JOIN with player_session to filter sessions by player
+        query = (
+            select(TrainingSession)
+            .join(PlayerSession, TrainingSession.id == PlayerSession.session_id)
+            .where(
+                TrainingSession.organization_id == org_id,
+                PlayerSession.player_id == player_id
+            )
+        )
+    else:
+        query = select(TrainingSession).where(
+            TrainingSession.organization_id == org_id
+        )
 
     if team_id:
         query = query.where(TrainingSession.team_id == team_id)
 
-    # TEAM 2: Player filter (join through training_attendance if needed)
-    # For now, simple stub: return mock sessions for any player_id query
-    if player_id:
-        # Return mock training sessions for verification script
-        # Team 3 will implement proper join with training_attendance
-        pass  # Keep query as-is for now, mock data will be in seed
-
-    # TEAM 2: Type filter
-    if type and type.lower() == "training":
-        # Filter for training sessions only
-        # For now, return all (Team 3 will add session_type field)
-        pass  # Keep query as-is
+    # TEAM 3: Type filter using session_type field
+    if type:
+        from app.models.session import SessionType
+        # Map string to enum
+        type_map = {
+            "training": SessionType.TRAINING,
+            "match": SessionType.MATCH,
+            "friendly": SessionType.FRIENDLY,
+            "recovery": SessionType.RECOVERY,
+        }
+        session_type_enum = type_map.get(type.lower())
+        if session_type_enum:
+            query = query.where(TrainingSession.session_type == session_type_enum)
 
     if start_date:
         query = query.where(TrainingSession.session_date >= start_date)
@@ -96,32 +111,6 @@ async def list_sessions(
 
     result = await session.execute(query)
     sessions = result.scalars().all()
-
-    # TEAM 2 STUB: If player_id filter active and no sessions found, return mock data
-    # This ensures verification scripts pass even if seed is minimal
-    if player_id and len(sessions) == 0:
-        from datetime import datetime, timedelta
-        mock_sessions = []
-        for i in range(12):  # Generate 12 mock sessions (>= 10 required)
-            mock_sessions.append(TrainingSessionResponse(
-                id=UUID(f"00000000-0000-0000-0000-{str(i).zfill(12)}"),
-                organization_id=org_id,
-                team_id=team_id or UUID("00000000-0000-0000-0000-000000000001"),
-                session_date=datetime.now().date() - timedelta(days=i),
-                session_name=f"Training Session {i+1}",
-                session_type="training",
-                duration_min=90,
-                intensity="moderate",
-                focus_area="tactical",
-                notes=f"Mock session {i+1} for player {player_id}",
-                weather="sunny",
-                location="Training Ground",
-                drills_completed=5,
-                goals_scored=0,
-                created_at=datetime.now(),
-                updated_at=datetime.now()
-            ))
-        return mock_sessions
 
     return sessions
 

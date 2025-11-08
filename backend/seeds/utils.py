@@ -422,7 +422,8 @@ def upsert_advanced(
     try:
         session.execute(text(insert_query), values)
         return "inserted"
-    except IntegrityError:
+    except IntegrityError as e:
         # Race condition or constraint violation
+        print(f"❌ IntegrityError in upsert_advanced: {e}")
         session.rollback()
         return "skipped"
