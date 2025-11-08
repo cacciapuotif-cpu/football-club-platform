@@ -5,22 +5,28 @@ Production-ready observability with traces, metrics, and logging.
 
 import logging
 
-from opentelemetry import trace, metrics
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from opentelemetry.instrumentation.redis import RedisInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-from opentelemetry.sdk.resources import Resource
-
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Try to import opentelemetry, but make it optional
+try:
+    from opentelemetry import trace, metrics
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+    from opentelemetry.instrumentation.redis import RedisInstrumentor
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+    from opentelemetry.sdk.resources import Resource
+    OPENTELEMETRY_AVAILABLE = True
+except ImportError:
+    OPENTELEMETRY_AVAILABLE = False
+    logger.warning("OpenTelemetry not available. Install with: pip install opentelemetry-api opentelemetry-sdk")
 
 
 def setup_telemetry(app):
@@ -28,6 +34,10 @@ def setup_telemetry(app):
     Setup OpenTelemetry instrumentation for FastAPI app.
     Instruments: FastAPI, SQLAlchemy, Redis, HTTPx
     """
+    if not OPENTELEMETRY_AVAILABLE:
+        logger.warning("OpenTelemetry not available. Skipping telemetry setup.")
+        return
+    
     if not settings.OTEL_ENABLED:
         logger.info("OpenTelemetry disabled")
         return

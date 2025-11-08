@@ -15,10 +15,21 @@ from app.dependencies import get_current_user, require_staff
 from app.models.player import Player
 from app.models.wellness import WellnessData
 from app.models.user import User
-from app.services.ml_predictor import get_ml_predictor
+
+# Try to import ML predictor, but make it optional
+try:
+    from app.services.ml_predictor import get_ml_predictor
+    ML_PREDICTOR_AVAILABLE = True
+except ImportError:
+    ML_PREDICTOR_AVAILABLE = False
+    get_ml_predictor = None
+    logger = logging.getLogger(__name__)
+    logger.warning("ML predictor not available. ML endpoints will be disabled.")
+
 from app.services.readiness_calculator import ReadinessCalculator, calculate_readiness_score
 
-logger = logging.getLogger(__name__)
+if not ML_PREDICTOR_AVAILABLE:
+    logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/ml", tags=["ML Reports & Predictions"])
 

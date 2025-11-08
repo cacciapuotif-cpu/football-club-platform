@@ -404,9 +404,9 @@ async def add_player_weight(
 @router.get("/{player_id}/weights", response_model=WeightSeriesResponse)
 async def get_player_weights(
     player_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
-    session: Annotated[AsyncSession, Depends(get_session)],
 ):
     """Get weight time series for a player."""
     org_id = await get_demo_org_id(session)
@@ -456,11 +456,11 @@ async def get_player_weights(
 @router.get("/{player_id}/metrics", response_model=MetricsResponse)
 async def get_player_metrics(
     player_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
     metrics: Optional[str] = Query(None, description="Comma-separated metric keys"),
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
     grouping: Literal["day", "week", "month"] = Query("day"),
-    session: Annotated[AsyncSession, Depends(get_session)],
 ):
     """Get chronological rows of wellness and performance metrics."""
     
@@ -638,11 +638,11 @@ async def create_player_metrics(
 @router.get("/{player_id}/report", response_model=ReportResponse)
 async def get_player_report(
     player_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
     metric: str = Query(..., description="Metric key to analyze"),
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
     grouping: Literal["day", "week", "month"] = Query("week"),
-    session: Annotated[AsyncSession, Depends(get_session)],
 ):
     """Get metric analysis with KPI (min, max, avg, trend %)."""
     

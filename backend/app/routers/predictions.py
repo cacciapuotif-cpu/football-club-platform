@@ -35,7 +35,7 @@ class FeatureImportance(BaseModel):
 @router.get("/{player_id}", response_model=PredictionResponse)
 async def get_player_prediction(
     player_id: UUID,
-    horizon: Literal[7, 14, 28] = Query(7, description="Prediction horizon in days"),
+    horizon: int = Query(7, description="Prediction horizon in days (7, 14, or 28)", ge=7, le=28),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -62,6 +62,10 @@ async def get_player_prediction(
 
     if not player:
         raise HTTPException(status_code=404, detail=f"Player {player_id} not found")
+
+    # Validate horizon value
+    if horizon not in [7, 14, 28]:
+        raise HTTPException(status_code=422, detail="Horizon must be 7, 14, or 28 days")
 
     # Mock prediction (Team 2 stub)
     # Team 3 will call actual ML service

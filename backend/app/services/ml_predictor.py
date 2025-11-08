@@ -6,9 +6,16 @@ from datetime import date, timedelta
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from lightgbm import LGBMRegressor
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
+
+# Try to import lightgbm, but make it optional
+try:
+    from lightgbm import LGBMRegressor
+    LIGHTGBM_AVAILABLE = True
+except ImportError:
+    LIGHTGBM_AVAILABLE = False
+    LGBMRegressor = None  # Placeholder
 
 from app.models.player import Player
 from app.models.session import TrainingSession
@@ -29,6 +36,12 @@ class MLPredictor:
 
     def _initialize_models(self):
         """Initialize and train basic models (in production, load from MLflow)."""
+        if not LIGHTGBM_AVAILABLE:
+            logger.warning("LightGBM not available. ML predictions will be disabled.")
+            self.performance_model = None
+            self.injury_risk_model = None
+            return
+        
         # Simple LightGBM model - in production this would be loaded from MLflow
         self.performance_model = LGBMRegressor(
             n_estimators=100,

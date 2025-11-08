@@ -66,21 +66,18 @@
     full_name: "Giuseppe Verdi"
     password: "admin123"
     is_active: true
-    is_superuser: true
 
   - organization_slug: "demo-fc"
     email: "coach@demo-fc.it"
     full_name: "Marco Rossi"
     password: "coach123"
     is_active: true
-    is_superuser: false
 
   - organization_slug: "demo-fc"
     email: "doctor@demo-fc.it"
     full_name: "Laura Bianchi"
     password: "doctor123"
     is_active: true
-    is_superuser: false
 
 05-players:
   # ==== DEMO_10x10 PROFILE: Exactly 10 players (Team 2) ====
