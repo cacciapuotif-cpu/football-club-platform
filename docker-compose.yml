@@ -1,199 +1,66 @@
-# ============================================================
-# DOCKER COMPOSE - Football Club Platform Development Stack
-# ============================================================
+# version: '3.8' - DEPRECATED: Docker Compose v2 doesn't require version field
 
 services:
-  # === DATABASE POSTGRESQL ===
+  # PostgreSQL Database
   db:
     image: postgres:16-alpine
-    container_name: football_club_platform_db
+    container_name: football_club_db
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-app}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-      POSTGRES_DB: ${POSTGRES_DB:-football_club_platform}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: football_club
     ports:
-      - "${FCP_DB_PORT:-5434}:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-app}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    networks:
-      - football_club_platform_net
-    labels:
-      - "com.project=football-club-platform"
-      - "com.role=db"
 
-  # === CACHE REDIS ===
+  # Redis (Opzionale, per cache e code)
   redis:
     image: redis:7-alpine
-    container_name: football_club_platform_redis
+    container_name: football_club_redis
     ports:
-      - "${FCP_REDIS_PORT:-6381}:6379"
+      - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    networks:
-      - football_club_platform_net
-    labels:
-      - "com.project=football-club-platform"
-      - "com.role=cache"
 
-  # === MINIO (S3-compatible storage) ===
-  minio:
-    image: minio/minio:latest
-    container_name: football_club_platform_minio
+  # MLflow Tracking Server
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.15.1
+    container_name: football_club_mlflow
     ports:
-      - "${MINIO_PORT:-9001}:9000"
-      - "${MINIO_CONSOLE_PORT:-9002}:9001"
+      - "5000:5000"
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin123}
+      MLFLOW_BACKEND_STORE_URI: postgresql://postgres:postgres@db:5432/football_club
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlruns
     volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    restart: unless-stopped
-    networks:
-      - football_club_platform_net
-    labels:
-      - "com.project=football-club-platform"
-      - "com.role=storage"
-
-  # === BACKEND API ===
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: football_club_platform_backend
-    environment:
-      APP_ENV: ${APP_ENV:-development}
-      DEBUG: ${DEBUG:-true}
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-football_club_platform}
-      REDIS_URL: redis://redis:6379/0
-      STORAGE_BACKEND: s3
-      S3_ENDPOINT_URL: http://minio:9000
-      S3_BUCKET: ${S3_BUCKET:-football-media}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
-    ports:
-      - "${FCP_API_PORT:-8000}:8000"
-    volumes:
-      - ./backend:/app
-      - backend_storage:/data/storage
+      - mlflow_data:/mlruns
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://postgres:postgres@db:5432/football_club
+      --default-artifact-root /mlruns
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/healthz >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 40s
     restart: unless-stopped
-    networks:
-      - football_club_platform_net
-    labels:
-      - "com.project=football-club-platform"
-      - "com.role=backend"
 
-  # === WORKER (Background Jobs) ===
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: football_club_platform_worker
-    environment:
-      APP_ENV: ${APP_ENV:-development}
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-football_club_platform}
-      REDIS_URL: redis://redis:6379/0
-      STORAGE_BACKEND: s3
-      S3_ENDPOINT_URL: http://minio:9000
-      S3_BUCKET: ${S3_BUCKET:-football-media}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
-    volumes:
-      - ./backend:/app
-    depends_on:
-      - db
-      - redis
-      - minio
-    command: rq worker --url redis://redis:6379/0 default video ml
-    restart: unless-stopped
-    networks:
-      - football_club_platform_net
-    labels:
-      - "com.project=football-club-platform"
-      - "com.role=worker"
-
-  # === FRONTEND (Next.js) ===
-  # IMPORTANT: DO NOT USE PORT 3001 - Reserved for pythonpro
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: football_club_platform_frontend
-    environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-      NEXT_PUBLIC_APP_NAME: "Football Club Platform"
-    ports:
-      - "${FCP_WEB_PORT:-3000}:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
-    depends_on:
-      - backend
-    restart: unless-stopped
-    networks:
-      - football_club_platform_net
-    labels:
-      - "com.project=football-club-platform"
-      - "com.role=frontend"
-
-# === VOLUMES (Persist Data) ===
 volumes:
   postgres_data:
-    name: ${COMPOSE_PROJECT_NAME:-football-club-platform}_postgres_data
+    driver: local
   redis_data:
-    name: ${COMPOSE_PROJECT_NAME:-football-club-platform}_redis_data
-  minio_data:
-    name: ${COMPOSE_PROJECT_NAME:-football-club-platform}_minio_data
-  backend_storage:
-    name: ${COMPOSE_PROJECT_NAME:-football-club-platform}_backend_storage
-
-# === NETWORK ===
-networks:
-  football_club_platform_net:
-    name: ${COMPOSE_PROJECT_NAME:-football-club-platform}_net
-    driver: bridge
-
-# ============================================================
-# COMANDI UTILI:
-# ------------------------------------------------------------
-# Preflight check:   make preflight
-# Avvio stack:       make up
-# Stop stack:        make down
-# View logs:         make logs
-# Smoke test:        make smoke
-# ============================================================
+    driver: local
+  mlflow_data:
+    driver: local

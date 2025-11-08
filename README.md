@@ -74,40 +74,140 @@ Se hai una GPU NVIDIA:
 
 ---
 
-## 🚀 Quick Start (1 Comando)
+## 🚀 Quickstart DEV (3 Step)
 
-### Primo Avvio
+### STEP 1 — Infra (DB + MLflow)
 
 ```bash
-# 1. Clona/estrai il progetto
-cd football-club-platform
-
-# 2. Crea file .env
+# Crea file .env
 cp .env.example .env
 
-# 3. OPZIONALE: Modifica .env (JWT_SECRET, password, etc.)
-# notepad .env       # Windows
-# nano .env          # macOS/Linux
-
-# 4. Inizializza tutto (build, migrate, seed)
-make init
+# Avvia database e MLflow
+docker compose pull
+docker compose up -d db mlflow
 ```
 
-**Output atteso:**
+### STEP 2 — Backend (migrate + seed DEMO_10×10 + API)
+
+**PowerShell (Windows):**
+```powershell
+# Installa dipendenze
+poetry install
+
+# Imposta profilo seed
+$env:SEED_PROFILE="DEMO_10x10"
+# O persistente: setx SEED_PROFILE "DEMO_10x10"
+
+# Esegui migrazioni
+poetry run alembic -c backend/alembic.ini upgrade head
+
+# Carica dati DEMO_10x10 (10 giocatori × 10+ sessioni + predictions + prescriptions)
+poetry run python backend/seeds/seed_all.py
+
+# Avvia API
+poetry run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-✓ Initialization complete!
-Backend API: http://localhost:8000/docs
-Frontend:    http://localhost:3000
+
+**Bash/Unix:**
+```bash
+# Installa dipendenze
+poetry install
+
+# Imposta profilo seed
+export SEED_PROFILE=DEMO_10x10
+
+# Esegui migrazioni
+poetry run alembic -c backend/alembic.ini upgrade head
+
+# Carica dati DEMO_10x10
+poetry run python backend/seeds/seed_all.py
+
+# Avvia API
+poetry run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### STEP 3 — Frontend (dev su porta 3000)
+
+```bash
+cd frontend
+npm install
+npm run dev -- -p 3000
+```
+
+### ✅ Verifica DEMO_10x10
+
+**PowerShell:**
+```powershell
+.\scripts\verify_demo_10x10.ps1
+```
+
+**Bash:**
+```bash
+./scripts/verify_demo_10x10.sh
 ```
 
 ### Accesso
 
 - **Frontend**: [http://localhost:3000](http://localhost:3000)
-- **Backend API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Credenziali demo**:
-  - Admin: `admin@club1.local` / `admin123`
-  - Coach: `coach@club1.local` / `coach123`
-  - Player: `player1@club1.local` / `player123`
+- **Backend API**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Backend Health**: [http://localhost:8000/healthz](http://localhost:8000/healthz)
+- **Backend Readyz**: [http://localhost:8000/readyz](http://localhost:8000/readyz)
+- **MLflow UI**: [http://localhost:5000](http://localhost:5000)
+
+---
+
+## 🏭 Quickstart PROD (Compose)
+
+### Avvio Produzione
+
+```bash
+# Build immagini
+docker compose -f docker-compose.prod.yml build
+
+# Avvia tutto (DB, Redis, MinIO, MLflow, OTEL, Prometheus, Grafana, Backend, Frontend, NGINX)
+docker compose -f docker-compose.prod.yml up -d
+
+# Verifica health
+curl -sf http://localhost/api/healthz
+curl -sf http://localhost/api/readyz
+```
+
+### k6 Smoke Test (Verifica DEMO_10x10)
+
+**Bash:**
+```bash
+BASE_URL="http://localhost/api/v1" \
+HEALTH_URL="http://localhost/api/healthz" \
+READY_URL="http://localhost/api/readyz" \
+./tests/k6/run_smoke.sh
+```
+
+**PowerShell:**
+```powershell
+.\tests\k6\run_smoke.ps1 -BaseUrl "http://localhost/api/v1"
+```
+
+### Accesso Produzione
+
+- **Frontend (via NGINX)**: [http://localhost](http://localhost)
+- **Backend API (via NGINX)**: [http://localhost/api](http://localhost/api)
+- **Grafana**: [http://localhost:3003](http://localhost:3003) (admin/admin)
+- **Prometheus**: [http://localhost:9090](http://localhost:9090)
+- **MinIO Console**: [http://localhost:9001](http://localhost:9001)
+
+### Cleanup
+
+```bash
+# Dev
+docker compose down
+
+# Prod
+docker compose -f docker-compose.prod.yml down
+
+# Volumi (ATTENZIONE: perdita dati)
+docker volume rm fcp_pgdata fcp_mlruns || true
+docker container prune -f && docker volume prune -f && docker network prune -f
+```
 
 ---
 
