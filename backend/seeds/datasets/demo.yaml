@@ -83,6 +83,9 @@
     is_superuser: false
 
 05-players:
+  # ==== DEMO_10x10 PROFILE: Exactly 10 players (Team 2) ====
+  # 8 from Prima Squadra + 2 from Primavera = 10 total
+  #
   # ==== PRIMA SQUADRA (Serie D) - 8 players ====
   - external_id: "demo-fc-ps-1"
     organization_slug: "demo-fc"
@@ -303,7 +306,8 @@
     concentration: 80
     adaptability: 88
 
-  # ==== PRIMAVERA (U19) - 4 players ====
+  # ==== PRIMAVERA (U19) - 2 players (REDUCED FOR DEMO_10x10) ====
+  # Team 2: Removed 2 players to reach exactly 10 total
   - external_id: "demo-fc-pv-1"
     organization_slug: "demo-fc"
     team_name: "Primavera"
@@ -394,35 +398,8 @@
     concentration: 75
     adaptability: 78
 
-  - external_id: "demo-fc-pv-9"
-    organization_slug: "demo-fc"
-    team_name: "Primavera"
-    first_name: "Moise"
-    last_name: "Kean"
-    date_of_birth: "2008-06-15"
-    nationality: "IT"
-    role_primary: "FW"
-    dominant_foot: "RIGHT"
-    dominant_arm: "RIGHT"
-    jersey_number: 9
-    height_cm: 183
-    weight_kg: 75
-    is_active: true
-    is_minor: true
-    guardian_name: "Isabella Kean"
-    guardian_email: "isabella.kean@example.com"
-    guardian_phone: "+39 333 4444444"
-    injury_prone: false
-    consent_given: true
-    medical_clearance: true
-    tactical_awareness: 65
-    positioning: 72
-    decision_making: 65
-    work_rate: 80
-    mental_strength: 70
-    leadership: 58
-    concentration: 68
-    adaptability: 75
+  # TEAM 2 NOTE: Removed 2 players (pv-5 Bastoni, pv-9 Kean) to reach exactly 10 players for DEMO_10x10
+  # Total: 8 (Prima Squadra) + 2 (Primavera) = 10 players
 
 99-relations:
   # Future: Player-team assignments across seasons

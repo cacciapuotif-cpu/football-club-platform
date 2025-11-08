@@ -262,6 +262,8 @@ from app.routers import (
     performance,
     plans,
     players,
+    predictions,  # NEW TEAM 2: Predictions wrapper
+    prescriptions,  # NEW TEAM 2: Prescriptions
     progress,  # NEW: Player progress tracking
     progress_ml,  # NEW: ML predictions for progress
     quick_input,
@@ -298,6 +300,12 @@ app.include_router(youth_ml.router, prefix=f"{api_prefix}/youth-ml", tags=["Yout
 # ============================================
 app.include_router(progress.router, prefix=api_prefix, tags=["Player Progress Tracking"])
 app.include_router(progress_ml.router, prefix=f"{api_prefix}/progress-ml", tags=["Progress ML - Risk & Insights"])
+
+# ============================================
+# TEAM 2 ROUTERS - Predictions & Prescriptions
+# ============================================
+app.include_router(predictions.router, prefix=f"{api_prefix}/predictions", tags=["Predictions - Injury Risk"])
+app.include_router(prescriptions.router, prefix=f"{api_prefix}/prescriptions", tags=["Prescriptions - Training Recommendations"])
 
 # ============================================
 # NEW CRITICAL ROUTERS - FULLY IMPLEMENTED
