@@ -20,6 +20,7 @@ Logging:
 
 from datetime import date
 from typing import Any, Dict
+from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.models.player import Player, PlayerRole, DominantFoot, DominantArm
@@ -161,8 +162,9 @@ def seed(session: Session, data: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
             if isinstance(dominant_arm, str):
                 dominant_arm = DominantArm(dominant_arm)
 
-            # Build payload
+            # Build payload (generate UUID for new inserts)
             payload = {
+                "id": str(uuid4()),  # Generate UUID for raw SQL insert
                 "organization_id": str(org["id"]),
                 "team_id": str(team["id"]) if team else None,
                 "first_name": first_name,
@@ -178,6 +180,7 @@ def seed(session: Session, data: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
                 "weight_kg": raw.get("weight_kg"),
                 "is_minor": raw.get("is_minor", False),
                 "is_active": raw.get("is_active", True),
+                "is_injured": raw.get("is_injured", False),
                 "injury_prone": raw.get("injury_prone", False),
                 "consent_given": raw.get("consent_given", True),
                 "medical_clearance": raw.get("medical_clearance", True),

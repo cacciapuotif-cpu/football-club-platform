@@ -21,9 +21,29 @@ from app.database import init_db
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
-# Prometheus metrics
-request_count = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
-request_duration = Histogram("http_request_duration_seconds", "HTTP request duration", ["method", "endpoint"])
+# Prometheus metrics (protected against duplicate registration)
+try:
+    from prometheus_client import REGISTRY
+    # Check if metrics already exist to avoid duplicates
+    existing_counters = [m for m in REGISTRY._collector_to_names.keys() if hasattr(m, '_name') and m._name == 'http_requests_total']
+    existing_histograms = [m for m in REGISTRY._collector_to_names.keys() if hasattr(m, '_name') and m._name == 'http_request_duration_seconds']
+    
+    if not existing_counters:
+        request_count = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+    else:
+        request_count = existing_counters[0]
+        logger.debug("Reusing existing http_requests_total counter")
+    
+    if not existing_histograms:
+        request_duration = Histogram("http_request_duration_seconds", "HTTP request duration", ["method", "endpoint"])
+    else:
+        request_duration = existing_histograms[0]
+        logger.debug("Reusing existing http_request_duration_seconds histogram")
+except Exception as e:
+    # Fallback: create metrics anyway (will fail if duplicates, but that's better than silent failure)
+    logger.warning(f"Could not check for existing metrics: {e}. Creating new metrics.")
+    request_count = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+    request_duration = Histogram("http_request_duration_seconds", "HTTP request duration", ["method", "endpoint"])
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
@@ -176,6 +196,7 @@ async def readyz():
 
     # Check migrations status (Alembic)
     try:
+        import os
         from alembic.config import Config as AlembicConfig
         from alembic.script import ScriptDirectory
         from alembic.runtime.migration import MigrationContext
@@ -183,15 +204,18 @@ async def readyz():
 
         # Get current revision from database
         async with engine.connect() as conn:
-            context = await conn.run_sync(
-                lambda sync_conn: MigrationContext.configure(sync_conn)
-            )
             current_rev = await conn.run_sync(
                 lambda sync_conn: MigrationContext.configure(sync_conn).get_current_revision()
             )
 
         # Get head revision from migrations
-        alembic_cfg = AlembicConfig("alembic.ini")
+        # Adjust path to find alembic.ini from backend directory
+        alembic_ini_path = os.path.join(os.path.dirname(__file__), "..", "alembic.ini")
+        if not os.path.exists(alembic_ini_path):
+            # Fallback for different deployment structures
+            alembic_ini_path = "backend/alembic.ini"
+
+        alembic_cfg = AlembicConfig(alembic_ini_path)
         script = ScriptDirectory.from_config(alembic_cfg)
         head_rev = script.get_current_head()
 
@@ -238,6 +262,8 @@ from app.routers import (
     performance,
     plans,
     players,
+    predictions,  # NEW TEAM 2: Predictions wrapper
+    prescriptions,  # NEW TEAM 2: Prescriptions
     progress,  # NEW: Player progress tracking
     progress_ml,  # NEW: ML predictions for progress
     quick_input,
@@ -274,6 +300,12 @@ app.include_router(youth_ml.router, prefix=f"{api_prefix}/youth-ml", tags=["Yout
 # ============================================
 app.include_router(progress.router, prefix=api_prefix, tags=["Player Progress Tracking"])
 app.include_router(progress_ml.router, prefix=f"{api_prefix}/progress-ml", tags=["Progress ML - Risk & Insights"])
+
+# ============================================
+# TEAM 2 ROUTERS - Predictions & Prescriptions
+# ============================================
+app.include_router(predictions.router, prefix=f"{api_prefix}/predictions", tags=["Predictions - Injury Risk"])
+app.include_router(prescriptions.router, prefix=f"{api_prefix}/prescriptions", tags=["Prescriptions - Training Recommendations"])
 
 # ============================================
 # NEW CRITICAL ROUTERS - FULLY IMPLEMENTED

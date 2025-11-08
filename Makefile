@@ -13,28 +13,32 @@ help: ## Show this help message
 # DOCKER COMMANDS
 # ============================================================================
 
+# IMPORTANT: Using docker-compose.prod.yml as default (full stack with monitoring)
+COMPOSE_FILE := docker-compose.prod.yml
+COMPOSE := docker-compose -f $(COMPOSE_FILE)
+
 .PHONY: up
-up: ## Start all services
-	docker-compose up -d
+up: ## Start all services (production stack)
+	$(COMPOSE) up -d
 
 .PHONY: down
 down: ## Stop all services
-	docker-compose down
+	$(COMPOSE) down
 
 .PHONY: restart
 restart: down up ## Restart all services
 
 .PHONY: logs
 logs: ## View logs (use SERVICE=name for specific service)
-	docker-compose logs -f $(SERVICE)
+	$(COMPOSE) logs -f $(SERVICE)
 
 .PHONY: ps
 ps: ## List running containers
-	docker-compose ps
+	$(COMPOSE) ps
 
 .PHONY: build
 build: ## Build all images
-	docker-compose build
+	$(COMPOSE) build
 
 # ============================================================================
 # DATABASE COMMANDS
@@ -178,7 +182,7 @@ quickstart: check-ports up migrate seed-minimal ## Quickstart: up + migrate + se
 
 .PHONY: quickstart-win
 quickstart-win: ## Quickstart for Windows
-	@powershell -Command "docker-compose up -d"
+	@powershell -Command "docker-compose -f $(COMPOSE_FILE) up -d"
 	@powershell -Command "Start-Sleep -Seconds 10"
 	@powershell -Command "docker exec football_club_platform_backend alembic upgrade head"
 	@powershell -Command "docker exec football_club_platform_backend python -m seeds.runner"

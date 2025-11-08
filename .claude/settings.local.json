@@ -128,7 +128,15 @@
       "Bash(alembic current:*)",
       "Bash(do)",
       "Bash(PLAYER_ID=\"33333333-3333-3333-3333-333333333331\")",
-      "Bash(poetry run alembic:*)"
+      "Bash(poetry run alembic:*)",
+      "Bash(npm run dev:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)",
+      "Bash(SEED_PROFILE=DEMO_10x10 python:*)",
+      "Bash(make seed-demo:*)",
+      "Bash(PLAYER_ID=\"582d673b-e385-4da4-8e75-8782e196dd16\":*)"
     ],
     "deny": [],
     "ask": []

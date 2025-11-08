@@ -2,14 +2,103 @@
 name = "football-club-platform"
 version = "1.0.0"
 description = "Piattaforma completa per la gestione dei dati di calciatori giovanili"
-authors = ["Your Name <you@example.com>"]
+authors = ["Football Club Platform Team <team@example.com>"]
 readme = "README.md"
-python = "^3.11"
+packages = [{include = "app", from = "backend"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-# NOTE: This file is legacy. Use backend/requirements.txt for actual dependencies.
-# Kept for reference only. Do not install from this file.
+# FastAPI & Server
+fastapi = ">=0.115,<0.116"
+uvicorn = {extras = ["standard"], version = ">=0.30,<0.31"}
+gunicorn = "^21.2.0"
+python-multipart = "^0.0.6"
+
+# Database
+sqlmodel = "0.0.22"
+sqlalchemy = "^2.0.25"
+psycopg = {extras = ["binary"], version = "^3.2"}
+asyncpg = "^0.29.0"
+alembic = ">=1.13,<1.14"
+
+# Validation & Config
+pydantic = ">=2.8,<3"
+pydantic-settings = ">=2.4,<3"
+email-validator = "^2.1.0"
+python-dotenv = "^1.0.0"
+
+# Auth & Security
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+bcrypt = "^4.1.2"
+
+# Redis & Queue
+redis = "^5.0.1"
+rq = "^1.16.0"
+
+# Scheduler
+apscheduler = "^3.10.4"
+
+# HTTP & Requests
+httpx = "^0.26.0"
+aiofiles = "^23.2.1"
+tenacity = "^8.2.3"
+
+# Video Processing
+opencv-python = "^4.10.0"
+
+# ML & Data Science
+numpy = "^1.26.4"
+pandas = "^2.1.4"
+scikit-learn = "^1.4.0"
+lightgbm = "^4.2.0"
+xgboost = "^2.0.3"
+joblib = "^1.3.2"
+shap = "^0.45.0"
+
+# Monitoring & Observability
+prometheus-client = "^0.19.0"
+structlog = "^24.1.0"
+
+# Charts & Images
+matplotlib = "^3.8.2"
+pillow = "^10.2.0"
+
+# Rate Limiting
+slowapi = "^0.1.9"
+
+# Storage & Cloud
+boto3 = "^1.34.34"
+
+# OpenTelemetry & Observability
+opentelemetry-api = "^1.22.0"
+opentelemetry-sdk = "^1.22.0"
+opentelemetry-instrumentation-fastapi = "^0.43b0"
+opentelemetry-instrumentation-sqlalchemy = "^0.43b0"
+opentelemetry-instrumentation-redis = "^0.43b0"
+opentelemetry-instrumentation-httpx = "^0.43b0"
+opentelemetry-exporter-otlp = "^1.22.0"
+sentry-sdk = {extras = ["fastapi"], version = "^1.40.0"}
+
+# ML Production
+mlflow = ">=2.15,<3"
+pyarrow = "^15.0.0"
+
+# Utilities
+python-dateutil = "^2.8.2"
+pytz = "^2023.3"
+croniter = "^2.0.1"
+faker = "^22.2.0"
+orjson = "^3.9.10"
+loguru = "^0.7.2"
+
+# Security & 2FA
+pyotp = "^2.9.0"
+qrcode = {extras = ["pil"], version = "^7.4.2"}
+cryptography = "^42.0.2"
+
+# Video Streaming (HLS)
+m3u8 = "^4.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
@@ -17,8 +106,11 @@ pytest-asyncio = "^0.23.3"
 pytest-cov = "^4.1.0"
 httpx = "^0.26.0"
 ruff = "^0.1.14"
+black = "^24.1.1"
+isort = "^5.13.2"
 mypy = "^1.8.0"
 types-redis = "^4.6.0"
+types-requests = "^2.31.0"
 
 [tool.ruff]
 line-length = 120
@@ -29,6 +121,14 @@ ignore = ["E501"]
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401"]
 
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
 [tool.mypy]
 python_version = "3.11"
 warn_return_any = true
@@ -37,12 +137,13 @@ disallow_untyped_defs = false
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["backend/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --cov=app --cov-report=term-missing"
+asyncio_mode = "auto"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"

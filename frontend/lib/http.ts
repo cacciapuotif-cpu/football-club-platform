@@ -8,7 +8,7 @@ import axios from 'axios';
 // Get API base URL and add /api/v1 prefix, strip trailing slashes
 const apiUrl = (typeof window !== 'undefined'
   ? process.env.NEXT_PUBLIC_API_URL
-  : process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:8012';
+  : process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:8000';
 const base = `${apiUrl}/api/v1`.replace(/\/+$/, '');
 
 // Create axios instance with normalized baseURL

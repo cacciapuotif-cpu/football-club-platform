@@ -55,18 +55,53 @@ async def list_sessions(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     team_id: UUID | None = Query(None, description="Filter by team"),
+    player_id: UUID | None = Query(None, description="Filter by player (TEAM 2)"),
+    type: str | None = Query(None, description="Filter by session type (e.g., 'training', 'match') - TEAM 2"),
     start_date: date | None = Query(None, description="Filter sessions from this date"),
     end_date: date | None = Query(None, description="Filter sessions until this date"),
 ):
-    """List training sessions for the demo organization (no auth)."""
+    """
+    List training sessions for the demo organization (no auth).
+
+    **Team 2 Enhancement**: Added player_id and type filters for DEMO_10x10 verification.
+    """
     # Get demo organization ID
     org_id = await get_demo_org_id(session)
-    query = select(TrainingSession).where(
-        TrainingSession.organization_id == org_id
-    )
+
+    # TEAM 3: Implement proper JOIN with PlayerSession for player_id filter
+    if player_id:
+        from app.models.player_session import PlayerSession
+        # JOIN with player_session to filter sessions by player
+        query = (
+            select(TrainingSession)
+            .join(PlayerSession, TrainingSession.id == PlayerSession.session_id)
+            .where(
+                TrainingSession.organization_id == org_id,
+                PlayerSession.player_id == player_id
+            )
+        )
+    else:
+        query = select(TrainingSession).where(
+            TrainingSession.organization_id == org_id
+        )
 
     if team_id:
         query = query.where(TrainingSession.team_id == team_id)
+
+    # TEAM 3: Type filter using session_type field
+    if type:
+        from app.models.session import SessionType
+        # Map string to enum
+        type_map = {
+            "training": SessionType.TRAINING,
+            "match": SessionType.MATCH,
+            "friendly": SessionType.FRIENDLY,
+            "recovery": SessionType.RECOVERY,
+        }
+        session_type_enum = type_map.get(type.lower())
+        if session_type_enum:
+            query = query.where(TrainingSession.session_type == session_type_enum)
+
     if start_date:
         query = query.where(TrainingSession.session_date >= start_date)
     if end_date:
@@ -76,6 +111,7 @@ async def list_sessions(
 
     result = await session.execute(query)
     sessions = result.scalars().all()
+
     return sessions
 
 
