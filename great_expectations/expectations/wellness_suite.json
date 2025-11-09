@@ -1,0 +1,41 @@
+{
+  "expectation_suite_name": "wellness_suite",
+  "expectations": [
+    {
+      "expectation_type": "expect_table_columns_to_match_set",
+      "kwargs": {
+        "column_set": [
+          "id",
+          "tenant_id",
+          "athlete_id",
+          "metric",
+          "value",
+          "unit",
+          "event_ts",
+          "ingest_ts",
+          "quality_score"
+        ]
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "value",
+        "min_value": 0,
+        "max_value": 10
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "metric"
+      }
+    }
+  ],
+  "meta": {
+    "notes": [
+      "Validates core wellness fields after ingestion."
+    ]
+  }
+}
+

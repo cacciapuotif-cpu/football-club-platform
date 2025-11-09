@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: stg_sessions
+    description: "Cleaned sessions feed with derived duration and session date."
+    columns:
+      - name: session_id
+        tests: [not_null, unique]
+      - name: tenant_id
+        tests: [not_null]
+      - name: session_date
+        tests:
+          - not_null
+  - name: stg_wellness
+    description: "Daily wellness readings with normalized units."
+    columns:
+      - name: id
+        tests: [not_null, unique]
+      - name: athlete_id
+        tests: [not_null]
+      - name: metric
+        tests: [not_null]
+

@@ -8,6 +8,9 @@
   --background-end-rgb: 255, 255, 255;
   --football_club_platform-blue: #2563eb;
   --football_club_platform-yellow: #eab308;
+  --brand-primary: #2563eb;
+  --brand-accent: #1d4ed8;
+  --brand-surface: #f8fafc;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -26,4 +29,8 @@ body {
       rgb(var(--background-end-rgb))
     )
     rgb(var(--background-start-rgb));
+}
+
+.theme-root {
+  background-color: var(--brand-surface);
 }

@@ -1,0 +1,22 @@
+version: 2
+
+sources:
+  - name: core
+    database: "{{ target.dbname }}"
+    schema: public
+    tables:
+      - name: sessions
+      - name: session_participation
+      - name: wellness_readings
+      - name: features
+version: 2
+
+sources:
+  - name: fcp
+    schema: public
+    database: "{{ target.database }}"
+    tables:
+      - name: sessions
+      - name: session_participation
+      - name: wellness_readings
+

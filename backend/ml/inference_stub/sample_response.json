@@ -1,0 +1,12 @@
+{
+  "athlete_id": "00000000-0000-0000-0000-000000000000",
+  "event_date": "2024-10-01",
+  "readiness_score": 62.5,
+  "risk_severity": "MEDIUM",
+  "drivers": [
+    {"feature": "acute_chronic_ratio_7_28", "value": 1.35, "direction": "risk_up"},
+    {"feature": "sleep_debt_hours_7d", "value": 5.0, "direction": "risk_up"},
+    {"feature": "rolling_hrv_baseline_28d", "value": 82.0, "direction": "risk_down"}
+  ]
+}
+

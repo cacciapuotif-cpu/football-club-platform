@@ -1,450 +1,524 @@
-"""Wellness data API router."""
+"""Wellness APIs for Sessions & Wellness domain (Team A/B foundations)."""
 
-from datetime import date
-from typing import Annotated, Literal
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta, timezone
+from typing import Annotated, Iterable
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, text
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
 from app.database import get_session
 from app.dependencies import get_current_user
-from app.models.wellness import WellnessData
+from app.models.sessions_wellness import (
+    Alert,
+    AlertStatus,
+    Athlete,
+    Feature,
+    Prediction,
+    PredictionSeverity,
+    Session,
+    SessionParticipation,
+    WellnessPolicy,
+)
 from app.models.player import Player
+from app.models.team import Team
 from app.models.user import User
-from app.schemas.wellness import (
-    WellnessDataCreate,
-    WellnessDataResponse,
-    WellnessDataUpdate,
-    WellnessSummary,
-    WellnessEntry,
+from app.schemas.sessions_wellness import (
+    AthleteContextResponse,
+    AthleteHeatmapCell,
+    AthleteReadinessSeries,
+    ContextSessionSummary,
+    FeatureSnapshot,
+    PlayerSummary,
+    ReadinessTrendPoint,
+    SnapshotAlert,
+    SnapshotPrediction,
+    TeamWellnessHeatmap,
+    WellnessPolicyCreate,
+    WellnessPolicyResponse,
 )
 
 router = APIRouter()
 
 
-# === DIAGNOSTICS ENDPOINT ===
+def _day_bounds(target: date) -> tuple[datetime, datetime]:
+    start = datetime.combine(target, datetime.min.time(), tzinfo=timezone.utc)
+    end = start + timedelta(days=1)
+    return start, end
 
 
-@router.get("/_ping")
-async def ping_wellness():
-    """Diagnostics ping endpoint to verify wellness router is mounted."""
-    return {
-        "ok": True,
-        "service": "wellness",
-        "version": "v2",
-        "endpoints": [
-            "/api/v1/wellness/summary",
-            "/api/v1/wellness/player/{player_id}",
-            "/api/v1/wellness/_ping"
-        ]
-    }
+async def _fetch_athletes_for_players(
+    session: AsyncSession, tenant_id: UUID, player_ids: Iterable[UUID]
+) -> list[Athlete]:
+    if not player_ids:
+        return []
+    stmt = select(Athlete).where(
+        Athlete.tenant_id == tenant_id,
+        Athlete.player_id.in_(list(player_ids)),
+    )
+    return list((await session.execute(stmt)).scalars().all())
 
 
-# === HELPER FUNCTIONS ===
-
-
-async def get_demo_org_id(session: AsyncSession) -> UUID:
-    """Get the first organization ID for demo purposes (no auth)."""
-    from app.models.organization import Organization
-    result = await session.execute(select(Organization.id).limit(1))
-    org_id = result.scalar_one_or_none()
-    if not org_id:
-        raise HTTPException(status_code=404, detail="No organization found. Please run seed script.")
-    return org_id
-
-
-@router.post("/", response_model=WellnessDataResponse, status_code=status.HTTP_201_CREATED)
-async def create_wellness_data(
-    wellness_data: WellnessDataCreate,
+@router.get(
+    "/teams/{team_id}/heatmap",
+    response_model=TeamWellnessHeatmap,
+    summary="Team wellness heatmap",
+    description="Return readiness and risk snapshot for all athletes in a team on the specified date.",
+)
+async def get_team_heatmap(
+    team_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-):
-    """Create wellness data for a player."""
-    wellness = WellnessData(
-        **wellness_data.model_dump(),
-        organization_id=current_user.organization_id
+    target_date: date = Query(default_factory=date.today, description="Date for the heatmap"),
+) -> TeamWellnessHeatmap:
+    team_stmt = select(Team).where(
+        Team.id == team_id,
+        Team.organization_id == current_user.organization_id,
     )
-    session.add(wellness)
-    await session.commit()
-    await session.refresh(wellness)
-    return wellness
+    team = (await session.execute(team_stmt)).scalar_one_or_none()
+    if not team:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
+
+    players_stmt = select(Player).where(
+        Player.team_id == team_id,
+        Player.organization_id == current_user.organization_id,
+    )
+    players = list((await session.execute(players_stmt)).scalars().all())
+    player_map = {player.id: player for player in players}
+
+    athletes = await _fetch_athletes_for_players(session, current_user.organization_id, player_map.keys())
+    athlete_ids = [athlete.athlete_id for athlete in athletes]
+    athlete_player_lookup = {athlete.athlete_id: athlete.player_id for athlete in athletes}
+
+    day_start, day_end = _day_bounds(target_date)
+    prev_start = day_start - timedelta(days=1)
+    prev_end = day_start
+
+    cells: list[AthleteHeatmapCell] = []
+    if not athletes:
+        return TeamWellnessHeatmap(team_id=team_id, date=target_date, cells=cells)
+
+    readiness_stmt = select(Feature).where(
+        Feature.tenant_id == current_user.organization_id,
+        Feature.athlete_id.in_(athlete_ids),
+        Feature.feature_name == "readiness_score",
+        Feature.event_ts >= day_start,
+        Feature.event_ts < day_end,
+    )
+    readiness_rows = list((await session.execute(readiness_stmt)).scalars().all())
+    readiness_map = {(row.athlete_id, row.feature_name): row for row in readiness_rows}
+
+    prev_stmt = select(Feature).where(
+        Feature.tenant_id == current_user.organization_id,
+        Feature.athlete_id.in_(athlete_ids),
+        Feature.feature_name == "readiness_score",
+        Feature.event_ts >= prev_start,
+        Feature.event_ts < prev_end,
+    )
+    prev_rows = list((await session.execute(prev_stmt)).scalars().all())
+    prev_map = {(row.athlete_id, row.feature_name): row for row in prev_rows}
+
+    predictions_stmt = select(Prediction).where(
+        Prediction.tenant_id == current_user.organization_id,
+        Prediction.athlete_id.in_(athlete_ids),
+        Prediction.event_ts >= day_start,
+        Prediction.event_ts < day_end,
+    )
+    prediction_rows = list((await session.execute(predictions_stmt)).scalars().all())
+    prediction_map = {row.athlete_id: row for row in prediction_rows}
+
+    alerts_stmt = select(Alert).where(
+        Alert.tenant_id == current_user.organization_id,
+        Alert.athlete_id.in_(athlete_ids),
+        Alert.opened_at >= day_start - timedelta(days=1),
+        Alert.opened_at < day_end + timedelta(days=1),
+    )
+    alert_rows = list((await session.execute(alerts_stmt)).scalars().all())
+    alerts_group: dict[UUID, list[Alert]] = {}
+    for alert in alert_rows:
+        alerts_group.setdefault(alert.athlete_id, []).append(alert)
+
+    for athlete in athletes:
+        player = player_map.get(athlete.player_id) if athlete.player_id else None
+        current_feature = readiness_map.get((athlete.athlete_id, "readiness_score"))
+        prev_feature = prev_map.get((athlete.athlete_id, "readiness_score"))
+        prediction = prediction_map.get(athlete.athlete_id)
+        related_alerts = alerts_group.get(athlete.athlete_id, [])
+
+        full_name = None
+        role = None
+        team_ref = None
+        if player:
+            full_name = f"{player.first_name} {player.last_name}".strip()
+            role = player.role_primary.value if hasattr(player.role_primary, "value") else str(player.role_primary)
+            team_ref = player.team_id
+
+        readiness_score = current_feature.feature_value if current_feature else None
+        readiness_delta = None
+        if current_feature and prev_feature:
+            readiness_delta = round(current_feature.feature_value - prev_feature.feature_value, 2)
+
+        latest_alert_at = (
+            max(alert.opened_at for alert in related_alerts) if related_alerts else None
+        )
+
+        cells.append(
+            AthleteHeatmapCell(
+                athlete_id=athlete.athlete_id,
+                player_id=player.id if player else None,
+                full_name=full_name,
+                role=role,
+                readiness_score=round(readiness_score, 2) if readiness_score is not None else None,
+                risk_severity=prediction.severity if prediction else None,
+                alerts_count=len(related_alerts),
+                latest_alert_at=latest_alert_at,
+                readiness_delta=readiness_delta,
+            )
+        )
+
+    return TeamWellnessHeatmap(team_id=team_id, date=target_date, cells=cells)
 
 
-# === NEW ENDPOINTS FOR WELLNESS SUMMARY TABLE ===
-# IMPORTANT: These specific routes must come BEFORE the generic /{wellness_id} route
-
-
-@router.get("/summary", response_model=list[WellnessSummary])
-async def get_wellness_summary(
+@router.get(
+    "/athletes/{athlete_id}/readiness",
+    response_model=AthleteReadinessSeries,
+    summary="Athlete readiness trend",
+)
+async def get_athlete_readiness(
+    athlete_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-    from_date: date | None = Query(None, alias="from", description="Filter wellness sessions from this date"),
-    to_date: date | None = Query(None, alias="to", description="Filter wellness sessions to this date"),
-    role: str | None = Query(None, description="Filter by player role (GK, DF, MF, FW)"),
-    search: str | None = Query(None, description="Search by player name (cognome/nome)"),
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(25, ge=1, le=100, description="Items per page"),
-    sort: Literal[
-        "cognome_asc", "cognome_desc",
-        "sessions_desc", "sessions_asc",
-        "last_entry_desc", "last_entry_asc"
-    ] = Query("cognome_asc", description="Sort order"),
-):
-    """
-    Get wellness summary table - list of players with wellness session counts.
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+) -> AthleteReadinessSeries:
+    athlete_stmt = select(Athlete).where(
+        Athlete.athlete_id == athlete_id,
+        Athlete.tenant_id == current_user.organization_id,
+    )
+    athlete = (await session.execute(athlete_stmt)).scalar_one_or_none()
+    if not athlete:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Athlete not found")
 
-    This endpoint uses the vw_wellness_summary view and allows filtering by:
-    - Date range (from/to) - recalculates session count for the period
-    - Player role
-    - Player name search
+    date_from = from_date or (date.today() - timedelta(days=30))
+    date_to = to_date or date.today()
 
-    Supports pagination and multiple sort options.
-    """
-    # Get demo organization ID
-    org_id = await get_demo_org_id(session)
+    range_start, _ = _day_bounds(date_from)
+    _, range_end = _day_bounds(date_to)
 
-    # If date filters are present, we need to recalculate the count dynamically
-    # Otherwise we can use the pre-aggregated view
-    if from_date or to_date:
-        # Build dynamic query with date filtering
-        base_query = select(
-            Player.id.label('player_id'),
-            Player.last_name.label('cognome'),
-            Player.first_name.label('nome'),
-            Player.role_primary.label('ruolo'),
-            func.count(WellnessData.date).label('wellness_sessions_count'),
-            func.max(WellnessData.date).label('last_entry_date')
-        ).select_from(Player).outerjoin(
-            WellnessData,
-            Player.id == WellnessData.player_id
-        ).where(
-            Player.organization_id == org_id
-        ).group_by(
-            Player.id, Player.last_name, Player.first_name, Player.role_primary
+    features_stmt = (
+        select(Feature)
+        .where(
+            Feature.tenant_id == current_user.organization_id,
+            Feature.athlete_id == athlete_id,
+            Feature.feature_name == "readiness_score",
+            Feature.event_ts >= range_start,
+            Feature.event_ts < range_end,
         )
+        .order_by(Feature.event_ts.asc())
+    )
+    feature_rows = list((await session.execute(features_stmt)).scalars().all())
 
-        # Apply date filters to the JOIN
-        date_conditions = []
-        if from_date:
-            date_conditions.append(WellnessData.date >= from_date)
-        if to_date:
-            date_conditions.append(WellnessData.date <= to_date)
-
-        if date_conditions:
-            # Re-build with date filtering on wellness data
-            base_query = select(
-                Player.id.label('player_id'),
-                Player.last_name.label('cognome'),
-                Player.first_name.label('nome'),
-                Player.role_primary.label('ruolo'),
-                func.count(WellnessData.date).label('wellness_sessions_count'),
-                func.max(WellnessData.date).label('last_entry_date')
-            ).select_from(Player).outerjoin(
-                WellnessData,
-                (Player.id == WellnessData.player_id) &
-                (WellnessData.date >= from_date if from_date else True) &
-                (WellnessData.date <= to_date if to_date else True)
-            ).where(
-                Player.organization_id == org_id
-            ).group_by(
-                Player.id, Player.last_name, Player.first_name, Player.role_primary
-            )
-    else:
-        # Use the view for better performance (no date filtering)
-        view_query = text("""
-            SELECT
-                player_id,
-                cognome,
-                nome,
-                ruolo,
-                wellness_sessions_count,
-                last_entry_date
-            FROM vw_wellness_summary
-            WHERE player_id IN (
-                SELECT id FROM players WHERE organization_id = :org_id
-            )
-        """)
-
-        # Build WHERE conditions for role and search
-        where_conditions = []
-        if role:
-            where_conditions.append(f"ruolo = '{role}'")
-        if search:
-            search_pattern = f"%{search}%"
-            where_conditions.append(f"(cognome ILIKE '{search_pattern}' OR nome ILIKE '{search_pattern}')")
-
-        if where_conditions:
-            view_query = text(f"""
-                SELECT
-                    player_id,
-                    cognome,
-                    nome,
-                    ruolo,
-                    wellness_sessions_count,
-                    last_entry_date
-                FROM vw_wellness_summary
-                WHERE player_id IN (
-                    SELECT id FROM players WHERE organization_id = :org_id
-                )
-                AND {' AND '.join(where_conditions)}
-            """)
-
-        # Apply sorting
-        sort_mapping = {
-            "cognome_asc": "cognome ASC, nome ASC",
-            "cognome_desc": "cognome DESC, nome DESC",
-            "sessions_desc": "wellness_sessions_count DESC",
-            "sessions_asc": "wellness_sessions_count ASC",
-            "last_entry_desc": "last_entry_date DESC NULLS LAST",
-            "last_entry_asc": "last_entry_date ASC NULLS LAST",
-        }
-        order_by = sort_mapping[sort]
-
-        # Add ORDER BY and pagination
-        offset = (page - 1) * page_size
-        view_query = text(str(view_query) + f" ORDER BY {order_by} LIMIT {page_size} OFFSET {offset}")
-
-        result = await session.execute(view_query, {"org_id": str(org_id)})
-        rows = result.fetchall()
-
-        return [
-            WellnessSummary(
-                player_id=row[0],
-                cognome=row[1],
-                nome=row[2],
-                ruolo=row[3],
-                wellness_sessions_count=row[4],
-                last_entry_date=row[5]
-            )
-            for row in rows
-        ]
-
-    # If using dynamic query (date filters present), continue with SQLAlchemy
-    # Apply role filter
-    if role:
-        base_query = base_query.where(Player.role_primary == role)
-
-    # Apply search filter
-    if search:
-        search_pattern = f"%{search}%"
-        base_query = base_query.where(
-            (Player.last_name.ilike(search_pattern)) |
-            (Player.first_name.ilike(search_pattern))
+    predictions_stmt = (
+        select(Prediction)
+        .where(
+            Prediction.tenant_id == current_user.organization_id,
+            Prediction.athlete_id == athlete_id,
+            Prediction.event_ts >= range_start,
+            Prediction.event_ts < range_end,
         )
+        .order_by(Prediction.event_ts.asc())
+    )
+    prediction_rows = list((await session.execute(predictions_stmt)).scalars().all())
+    prediction_map = {row.event_ts: row for row in prediction_rows}
 
-    # Apply sorting
-    sort_mapping = {
-        "cognome_asc": [Player.last_name.asc(), Player.first_name.asc()],
-        "cognome_desc": [Player.last_name.desc(), Player.first_name.desc()],
-        "sessions_desc": [text("wellness_sessions_count DESC")],
-        "sessions_asc": [text("wellness_sessions_count ASC")],
-        "last_entry_desc": [text("last_entry_date DESC NULLS LAST")],
-        "last_entry_asc": [text("last_entry_date ASC NULLS LAST")],
-    }
-    for order_clause in sort_mapping[sort]:
-        base_query = base_query.order_by(order_clause)
-
-    # Apply pagination
-    offset = (page - 1) * page_size
-    base_query = base_query.offset(offset).limit(page_size)
-
-    result = await session.execute(base_query)
-    rows = result.fetchall()
-
-    return [
-        WellnessSummary(
-            player_id=row.player_id,
-            cognome=row.cognome,
-            nome=row.nome,
-            ruolo=row.ruolo,
-            wellness_sessions_count=row.wellness_sessions_count,
-            last_entry_date=row.last_entry_date
+    points = [
+        ReadinessTrendPoint(
+            event_ts=row.event_ts,
+            readiness_score=round(row.feature_value, 2),
+            severity=prediction_map.get(row.event_ts).severity if prediction_map.get(row.event_ts) else None,
         )
-        for row in rows
+        for row in feature_rows
     ]
 
+    return AthleteReadinessSeries(athlete_id=athlete_id, points=points)
 
-@router.get("/player/{player_id}", response_model=list[WellnessEntry])
-async def get_player_wellness_entries(
-    player_id: UUID,
+
+@router.get(
+    "/athletes/{athlete_id}/context",
+    response_model=AthleteContextResponse,
+    summary="Athlete context snapshot",
+)
+async def get_athlete_context(
+    athlete_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-    from_date: date | None = Query(None, alias="from", description="Filter from this date"),
-    to_date: date | None = Query(None, alias="to", description="Filter to this date"),
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(50, ge=1, le=100, description="Items per page"),
-):
-    """
-    Get wellness entries for a specific player.
-
-    Returns paginated list of wellness data entries for the given player,
-    ordered by date descending (most recent first).
-    """
-    # Get demo organization ID
-    org_id = await get_demo_org_id(session)
-
-    # Verify player exists and belongs to organization
-    player_result = await session.execute(
-        select(Player).where(
-            Player.id == player_id,
-            Player.organization_id == org_id
-        )
+    days: int = Query(7, ge=1, le=30),
+) -> AthleteContextResponse:
+    athlete_stmt = select(Athlete).where(
+        Athlete.athlete_id == athlete_id,
+        Athlete.tenant_id == current_user.organization_id,
     )
-    player = player_result.scalar_one_or_none()
+    athlete = (await session.execute(athlete_stmt)).scalar_one_or_none()
+    if not athlete:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Athlete not found")
 
-    if not player:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Player not found"
+    now = datetime.now(timezone.utc)
+    range_start = now - timedelta(days=days)
+
+    player = None
+    if athlete.player_id:
+        player_stmt = select(Player).where(
+            Player.id == athlete.player_id,
+            Player.organization_id == current_user.organization_id,
         )
+        player = (await session.execute(player_stmt)).scalar_one_or_none()
 
-    # Build query for wellness entries
-    query = select(WellnessData).where(
-        WellnessData.player_id == player_id,
-        WellnessData.organization_id == org_id
-    )
-
-    # Apply date filters
-    if from_date:
-        query = query.where(WellnessData.date >= from_date)
-    if to_date:
-        query = query.where(WellnessData.date <= to_date)
-
-    # Order by date descending and paginate
-    offset = (page - 1) * page_size
-    query = query.order_by(WellnessData.date.desc()).offset(offset).limit(page_size)
-
-    result = await session.execute(query)
-    wellness_entries = result.scalars().all()
-
-    # Map DB fields to schema fields (with shortened names)
-    return [
-        WellnessEntry(
-            date=entry.date,
-            sleep_h=entry.sleep_hours,
-            sleep_quality=entry.sleep_quality,
-            fatigue=entry.fatigue_rating,
-            stress=entry.stress_rating,
-            mood=entry.mood_rating,
-            doms=entry.doms_rating,
-            weight_kg=entry.body_weight_kg,
-            notes=entry.notes
-        )
-        for entry in wellness_entries
+    feature_names = [
+        "readiness_score",
+        "acute_chronic_ratio_7_28",
+        "rolling_hrv_baseline_28d",
+        "sleep_debt_hours_7d",
+        "wellness_survey_z",
     ]
 
+    features_stmt = (
+        select(Feature)
+        .where(
+            Feature.tenant_id == current_user.organization_id,
+            Feature.athlete_id == athlete_id,
+            Feature.feature_name.in_(feature_names),
+            Feature.event_ts >= range_start - timedelta(days=7),
+            Feature.event_ts <= now,
+        )
+        .order_by(Feature.event_ts.asc())
+    )
+    feature_rows = list((await session.execute(features_stmt)).scalars().all())
 
-# === GENERIC CRUD ENDPOINTS (must come after specific routes) ===
+    latest_features: dict[str, Feature] = {}
+    for feature in feature_rows:
+        latest_features[feature.feature_name] = feature
 
-
-@router.get("/", response_model=list[WellnessDataResponse])
-async def list_wellness_data(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    player_id: UUID | None = Query(None, description="Filter by player"),
-    start_date: date | None = Query(None, description="Filter from this date"),
-    end_date: date | None = Query(None, description="Filter until this date"),
-):
-    """List wellness data for the demo organization (no auth)."""
-    # Get demo organization ID
-    org_id = await get_demo_org_id(session)
-    query = select(WellnessData).where(
-        WellnessData.organization_id == org_id
+    readiness_trend_series = await get_athlete_readiness(
+        athlete_id=athlete_id,
+        current_user=current_user,
+        session=session,
+        from_date=(now - timedelta(days=days)).date(),
+        to_date=now.date(),
     )
 
-    if player_id:
-        query = query.where(WellnessData.player_id == player_id)
-    if start_date:
-        query = query.where(WellnessData.date >= start_date)
-    if end_date:
-        query = query.where(WellnessData.date <= end_date)
+    sessions_stmt = (
+        select(Session, SessionParticipation)
+        .join(
+            SessionParticipation,
+            and_(
+                SessionParticipation.session_id == Session.session_id,
+                SessionParticipation.tenant_id == current_user.organization_id,
+            ),
+        )
+        .where(
+            SessionParticipation.athlete_id == athlete_id,
+            SessionParticipation.tenant_id == current_user.organization_id,
+            Session.start_ts >= range_start,
+            Session.start_ts <= now,
+        )
+        .order_by(Session.start_ts.desc())
+    )
+    session_rows = list((await session.execute(sessions_stmt)).all())
+    recent_sessions = [
+        ContextSessionSummary(
+            session_id=session_obj.session_id,
+            start_ts=session_obj.start_ts,
+            type=session_obj.type,
+            load=participation.load,
+            rpe=participation.rpe,
+            minutes=None,
+        )
+        for session_obj, participation in session_rows
+    ]
 
-    query = query.offset(skip).limit(limit).order_by(WellnessData.date.desc())
+    alerts_stmt = select(Alert).where(
+        Alert.tenant_id == current_user.organization_id,
+        Alert.athlete_id == athlete_id,
+        Alert.opened_at >= range_start,
+        Alert.opened_at <= now,
+    )
+    alert_rows = list((await session.execute(alerts_stmt)).scalars().all())
+    alerts = [
+        SnapshotAlert(
+            id=alert.id,
+            athlete_id=alert.athlete_id,
+            session_id=alert.session_id,
+            status=alert.status,
+            severity=alert.severity,
+            opened_at=alert.opened_at,
+            closed_at=alert.closed_at,
+            policy_id=alert.policy_id,
+        )
+        for alert in alert_rows
+    ]
 
-    result = await session.execute(query)
-    wellness_list = result.scalars().all()
-    return wellness_list
+    latest_feature_snapshots = [
+        FeatureSnapshot(
+            feature_name=name,
+            feature_value=round(feature.feature_value, 3),
+            event_ts=feature.event_ts,
+        )
+        for name, feature in latest_features.items()
+        if feature is not None
+    ]
+
+    return AthleteContextResponse(
+        athlete_id=athlete_id,
+        player=PlayerSummary(
+            player_id=player.id if player else None,
+            full_name=f"{player.first_name} {player.last_name}".strip() if player else None,
+            role=player.role_primary.value if player and hasattr(player.role_primary, "value") else (str(player.role_primary) if player else None),
+            team_id=player.team_id if player else None,
+        ),
+        range_start=range_start,
+        range_end=now,
+        latest_features=latest_feature_snapshots,
+        readiness_trend=readiness_trend_series.points,
+        recent_sessions=recent_sessions,
+        alerts=alerts,
+    )
 
 
-@router.get("/{wellness_id}", response_model=WellnessDataResponse)
-async def get_wellness_data(
-    wellness_id: UUID,
+@router.post(
+    "/policies",
+    response_model=WellnessPolicyResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create wellness policy",
+)
+async def create_wellness_policy(
+    payload: WellnessPolicyCreate,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-):
-    """Get specific wellness data entry."""
-    result = await session.execute(
-        select(WellnessData).where(
-            WellnessData.id == wellness_id,
-            WellnessData.organization_id == current_user.organization_id
-        )
+) -> WellnessPolicyResponse:
+    policy = WellnessPolicy(
+        tenant_id=current_user.organization_id,
+        name=payload.name,
+        description=payload.description,
+        thresholds=payload.thresholds,
+        cooldown_hours=payload.cooldown_hours,
+        min_data_completeness=payload.min_data_completeness,
     )
-    wellness = result.scalar_one_or_none()
-
-    if not wellness:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Wellness data not found"
-        )
-
-    return wellness
-
-
-@router.patch("/{wellness_id}", response_model=WellnessDataResponse)
-async def update_wellness_data(
-    wellness_id: UUID,
-    wellness_data: WellnessDataUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
-    session: Annotated[AsyncSession, Depends(get_session)],
-):
-    """Update wellness data."""
-    result = await session.execute(
-        select(WellnessData).where(
-            WellnessData.id == wellness_id,
-            WellnessData.organization_id == current_user.organization_id
-        )
-    )
-    wellness = result.scalar_one_or_none()
-
-    if not wellness:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Wellness data not found"
-        )
-
-    update_data = wellness_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(wellness, field, value)
-
-    session.add(wellness)
+    session.add(policy)
     await session.commit()
-    await session.refresh(wellness)
-    return wellness
+    await session.refresh(policy)
+    return WellnessPolicyResponse.model_validate(policy)
 
 
-@router.delete("/{wellness_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_wellness_data(
-    wellness_id: UUID,
+@router.get(
+    "/policies",
+    response_model=list[WellnessPolicyResponse],
+    summary="List wellness policies",
+)
+async def list_wellness_policies(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-):
-    """Delete wellness data."""
-    result = await session.execute(
-        select(WellnessData).where(
-            WellnessData.id == wellness_id,
-            WellnessData.organization_id == current_user.organization_id
-        )
+) -> list[WellnessPolicyResponse]:
+    stmt = select(WellnessPolicy).where(WellnessPolicy.tenant_id == current_user.organization_id).order_by(
+        WellnessPolicy.created_at.desc()
     )
-    wellness = result.scalar_one_or_none()
+    policies = list((await session.execute(stmt)).scalars().all())
+    return [WellnessPolicyResponse.model_validate(policy) for policy in policies]
 
-    if not wellness:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Wellness data not found"
-        )
 
-    await session.delete(wellness)
+@router.get(
+    "/policies/{policy_id}",
+    response_model=WellnessPolicyResponse,
+    summary="Get wellness policy",
+)
+async def get_wellness_policy(
+    policy_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> WellnessPolicyResponse:
+    stmt = select(WellnessPolicy).where(
+        WellnessPolicy.id == policy_id,
+        WellnessPolicy.tenant_id == current_user.organization_id,
+    )
+    policy = (await session.execute(stmt)).scalar_one_or_none()
+    if not policy:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+    return WellnessPolicyResponse.model_validate(policy)
+
+
+@router.patch(
+    "/policies/{policy_id}",
+    response_model=WellnessPolicyResponse,
+    summary="Update wellness policy",
+)
+async def update_wellness_policy(
+    policy_id: UUID,
+    payload: WellnessPolicyCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> WellnessPolicyResponse:
+    stmt = select(WellnessPolicy).where(
+        WellnessPolicy.id == policy_id,
+        WellnessPolicy.tenant_id == current_user.organization_id,
+    )
+    policy = (await session.execute(stmt)).scalar_one_or_none()
+    if not policy:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+
+    policy.name = payload.name
+    policy.description = payload.description
+    policy.thresholds = payload.thresholds
+    policy.cooldown_hours = payload.cooldown_hours
+    policy.min_data_completeness = payload.min_data_completeness
+    await session.commit()
+    await session.refresh(policy)
+    return WellnessPolicyResponse.model_validate(policy)
+
+
+@router.delete(
+    "/policies/{policy_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete wellness policy",
+)
+async def delete_wellness_policy(
+    policy_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    stmt = select(WellnessPolicy).where(
+        WellnessPolicy.id == policy_id,
+        WellnessPolicy.tenant_id == current_user.organization_id,
+    )
+    policy = (await session.execute(stmt)).scalar_one_or_none()
+    if not policy:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+
+    await session.delete(policy)
     await session.commit()
     return None
+
+
+@router.post(
+    "/alerts/{alert_id}/ack",
+    summary="Acknowledge alert",
+)
+async def acknowledge_alert(
+    alert_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, str]:
+    stmt = select(Alert).where(
+        Alert.id == alert_id,
+        Alert.tenant_id == current_user.organization_id,
+    )
+    alert = (await session.execute(stmt)).scalar_one_or_none()
+    if not alert:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+
+    alert.status = AlertStatus.ACKNOWLEDGED
+    alert.ack_by = current_user.id
+    alert.closed_at = datetime.now(timezone.utc)
+    await session.commit()
+    return {"status": "ok", "message": "Alert acknowledged"}

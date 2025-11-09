@@ -1,0 +1,12 @@
+name: ingest_contract
+config_version: 1
+class_name: SimpleCheckpoint
+run_name_template: "%Y%m%d-%H%M_ingest"
+validations:
+  - batch_request:
+      runtime_parameters:
+        query: "select * from wellness_readings where event_ts >= now() - interval '1 day'"
+      batch_identifiers:
+        default_identifier_name: "wellness_readings_daily"
+    expectation_suite_name: ingest_contract
+

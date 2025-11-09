@@ -1,0 +1,14 @@
+sessions_wellness:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      user: postgres
+      password: postgres
+      port: 5432
+      dbname: football_club
+      schema: analytics_dev
+      threads: 4
+      keepalives_idle: 0
+

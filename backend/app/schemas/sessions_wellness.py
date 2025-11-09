@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
@@ -221,6 +221,86 @@ class SessionWellnessSnapshot(BaseModel):
     metrics: list[WellnessMetricPoint]
     predictions: list[SnapshotPrediction]
     alerts: list[SnapshotAlert]
+
+    class Config:
+        from_attributes = True
+
+
+class AthleteHeatmapCell(BaseModel):
+    athlete_id: UUID
+    player_id: Optional[UUID]
+    full_name: Optional[str]
+    role: Optional[str]
+    readiness_score: Optional[float]
+    risk_severity: Optional[PredictionSeverity]
+    alerts_count: int = 0
+    latest_alert_at: Optional[datetime] = None
+    readiness_delta: Optional[float] = None
+
+
+class TeamWellnessHeatmap(BaseModel):
+    team_id: UUID
+    date: date
+    cells: list[AthleteHeatmapCell]
+
+
+class ReadinessTrendPoint(BaseModel):
+    event_ts: datetime
+    readiness_score: Optional[float]
+    severity: Optional[PredictionSeverity]
+
+
+class AthleteReadinessSeries(BaseModel):
+    athlete_id: UUID
+    points: list[ReadinessTrendPoint]
+
+
+class PlayerSummary(BaseModel):
+    player_id: Optional[UUID]
+    full_name: Optional[str]
+    role: Optional[str]
+    team_id: Optional[UUID]
+
+
+class ContextSessionSummary(BaseModel):
+    session_id: UUID
+    start_ts: datetime
+    type: SessionType
+    load: Optional[float]
+    rpe: Optional[float]
+    minutes: Optional[float]
+
+
+class FeatureSnapshot(BaseModel):
+    feature_name: str
+    feature_value: float
+    event_ts: datetime
+
+
+class AthleteContextResponse(BaseModel):
+    athlete_id: UUID
+    player: PlayerSummary
+    range_start: datetime
+    range_end: datetime
+    latest_features: list[FeatureSnapshot]
+    readiness_trend: list[ReadinessTrendPoint]
+    recent_sessions: list[ContextSessionSummary]
+    alerts: list[SnapshotAlert]
+
+
+class WellnessPolicyCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    thresholds: Optional[dict] = None
+    cooldown_hours: int = 24
+    min_data_completeness: float = 0.8
+
+
+class WellnessPolicyResponse(WellnessPolicyCreate):
+    id: UUID
+    tenant_id: UUID
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True

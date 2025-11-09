@@ -1,0 +1,12 @@
+version: 2
+
+models:
+  - name: readiness_dashboard
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - athlete_id
+            - session_date
+      - dbt_utils.not_null:
+          column_name: tenant_id
+

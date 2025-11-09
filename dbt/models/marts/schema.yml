@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: fct_readiness
+    description: "Daily readiness indicators aggregated per athlete."
+    columns:
+      - name: athlete_id
+        tests: [not_null]
+      - name: event_date
+        tests:
+          - not_null
+          - unique:
+              combination_of_columns: [athlete_id, event_date]
+  - name: fct_session_load
+    description: "Aggregated session load metrics per athlete."
+    columns:
+      - name: athlete_id
+        tests: [not_null]
+      - name: session_date
+        tests: [not_null]
+

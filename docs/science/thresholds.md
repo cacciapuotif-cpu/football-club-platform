@@ -1,3 +1,58 @@
+# Performance & Wellness Threshold Framework
+
+## Load Metrics
+- **Session RPE x Duration (sRPE)**  
+  - Baseline per role/age:
+    - GK: 250–400 AU/session
+    - DF: 300–500 AU/session
+    - MF: 350–550 AU/session
+    - FW: 320–520 AU/session
+  - Alert thresholds:
+    - High acute load: > 120% of rolling 7-day average
+    - Low load: < 60% of planned weekly target
+
+- **Acute:Chronic Workload Ratio (ACWR)**  
+  - Safe band: 0.8 – 1.3
+  - Watch band: 1.31 – 1.50 → flag amber
+  - Danger band: > 1.50 or < 0.7 → flag red
+
+## Wellness Metrics (Self-Reported)
+- Subjective wellness score (1–10):
+  - Green: ≥7
+  - Amber: 5–6
+  - Red: ≤4
+- Sleep Hours:
+  - Age 15–17: target 8–10 h, red if <7 h 2 consecutive days.
+- Soreness/Stress/Mood (1–10):
+  - Alert if drop ≥3 points from personal baseline.
+
+## Tests & Screens
+- CMJ (Countermovement Jump):
+  - Age 15–17: 35–45 cm expected; drop >10% from baseline triggers check.
+- YoYo IR2:
+  - Age 16–17 MF: 1000+ m high; <800 m red.
+- VO2max estimates:
+  - Age 15–17: 52–60 ml/kg/min (role dependent); drop >5 ml/kg/min flagged.
+
+## Psychometrics
+- Mood (Likert 1–5 or 1–10):
+  - Consistent scores ≤3 for 3 days triggers psych review.
+- Readiness questionnaires:
+  - If total score <60% of baseline → escalate.
+
+## Injury & RTP
+- Medical coding aligned to FIFA 11+ categories.
+- RTP phases:  
+  - Phase 0: Diagnosis  
+  - Phase 1: Controlled training  
+  - Phase 2: Partial return  
+  - Phase 3: Full return  
+  - Automatic alerts if load > planned in Phase 2.
+
+## Alert Logic Summary
+- Combine load violations + wellness red flags → High priority alert.
+- Combine psych drop + high ACWR → medium priority, requires check.
+- Use readiness score from ML to adjust thresholds ±10%.
 # Scientific Thresholds & Protocols — Football Club Platform
 
 ## 1. Load & RPE Thresholds

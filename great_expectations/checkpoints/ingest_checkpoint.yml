@@ -1,0 +1,11 @@
+name: ingest_checkpoint
+config_version: 1
+class_name: SimpleCheckpoint
+run_name_template: "%Y%m%d-%H%M_ingest"
+validations:
+  - batch_request:
+      datasource_name: fcp_postgres
+      data_asset_name: wellness_readings
+      options: {}
+    expectation_suite_name: wellness_suite
+

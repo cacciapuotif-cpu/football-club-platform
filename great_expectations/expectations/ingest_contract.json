@@ -1,0 +1,57 @@
+{
+  "expectation_suite_name": "ingest_contract",
+  "expectations": [
+    {
+      "expectation_type": "expect_table_columns_to_match_set",
+      "kwargs": {
+        "column_set": [
+          "id",
+          "tenant_id",
+          "athlete_id",
+          "metric",
+          "value",
+          "unit",
+          "event_ts",
+          "ingest_ts",
+          "quality_score"
+        ]
+      },
+      "meta": {
+        "notes": "Wellness readings structure"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "value",
+        "min_value": 0,
+        "max_value": 1200
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "tenant_id"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "metric",
+        "regex": "^(SLEEP_HOURS|HRV|RESTING_HR|FATIGUE|SORENESS|MOOD|STRESS|ENERGY)$"
+      }
+    },
+    {
+      "expectation_type": "expect_column_max_to_be_between",
+      "kwargs": {
+        "column": "event_ts",
+        "min_value": "now-2h",
+        "max_value": "now+1h"
+      },
+      "meta": {
+        "notes": "Freshness"
+      }
+    }
+  ]
+}
+

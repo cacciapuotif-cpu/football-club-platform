@@ -1,3 +1,116 @@
+---
+version: 1.0
+description: Unified data contracts for Sessions & Wellness domain
+tables:
+  athletes:
+    primary_key: athlete_id
+    fields:
+      athlete_id: uuid
+      tenant_id: uuid
+      pii_token: string
+      external_ids:
+        type: object
+        description: Optional map of provider -> identifier
+      status:
+        type: string
+        enum: [ACTIVE, INACTIVE, REHAB, LOANED]
+      dominant_foot: string | null
+      position: string
+      birth_date: date
+      created_at: timestamp_tz
+      updated_at: timestamp_tz
+  sessions:
+    primary_key: session_id
+    fields:
+      session_id: uuid
+      tenant_id: uuid
+      team_id: uuid
+      session_type:
+        type: string
+        enum: [MATCH, TRAINING, RECOVERY, GYM]
+      start_ts: timestamp_tz
+      end_ts: timestamp_tz
+      rpe_avg: float | null
+      load: float | null
+      objective: string | null
+      notes: string | null
+      created_at: timestamp_tz
+  session_participation:
+    primary_key: id
+    fields:
+      id: uuid
+      tenant_id: uuid
+      session_id: uuid
+      athlete_id: uuid
+      role: string
+      rpe: float | null
+      load: float | null
+      minutes: float | null
+      status:
+        type: string
+        enum: [FULL, PARTIAL, ABSENT, LIMITED]
+      created_at: timestamp_tz
+  wellness_readings:
+    primary_key: id
+    fields:
+      id: uuid
+      tenant_id: uuid
+      athlete_id: uuid
+      source:
+        type: string
+        enum: [SURVEY, WEARABLE, MEDICAL]
+      metric:
+        type: string
+        enum: [SLEEP_HOURS, HRV, RESTING_HR, FATIGUE, SORENESS, MOOD, STRESS, ENERGY]
+      value: float
+      unit: string
+      event_ts: timestamp_tz
+      ingest_ts: timestamp_tz
+      quality_score: float | null
+      metadata: object | null
+  features:
+    primary_key: [tenant_id, athlete_id, feature_name, event_ts]
+    fields:
+      tenant_id: uuid
+      athlete_id: uuid
+      feature_name: string
+      feature_value: float
+      event_ts: date
+      computation_ts: timestamp_tz
+      source_job: string
+  predictions:
+    primary_key: id
+    fields:
+      id: uuid
+      tenant_id: uuid
+      athlete_id: uuid
+      model_key: string
+      model_version: string
+      score: float
+      severity:
+        type: string
+        enum: [LOW, MEDIUM, HIGH]
+      drivers: object
+      event_ts: date
+      created_at: timestamp_tz
+      explanation_artifact_path: string | null
+  alerts:
+    primary_key: id
+    fields:
+      id: uuid
+      tenant_id: uuid
+      athlete_id: uuid
+      session_id: uuid | null
+      status:
+        type: string
+        enum: [OPEN, ACKNOWLEDGED, RESOLVED]
+      severity:
+        type: string
+        enum: [INFO, LOW, MEDIUM, HIGH, CRITICAL]
+      policy_id: string
+      opened_at: timestamp_tz
+      closed_at: timestamp_tz | null
+      ack_by: uuid | null
 # Unified Data Schema — Sessions & Wellness Domain
 
 version: 1

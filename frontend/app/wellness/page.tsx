@@ -1,246 +1,168 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import WellnessTable from '@/components/wellness/WellnessTable'
-import WellnessPlayerDrawer from '@/components/wellness/WellnessPlayerDrawer'
-import { getWellnessSummary, getPlayerWellnessEntries } from '@/lib/api/wellness'
-import type { WellnessSummary, WellnessEntry } from '@/types/wellness'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { format } from 'date-fns'
+import { it } from 'date-fns/locale'
+import { HeatmapGrid } from '@/components/wellness/HeatmapGrid'
+import { fetchTeamHeatmap, fetchWellnessPolicies } from '@/lib/api/wellness'
+import { fetchTeams } from '@/lib/api/sessions'
+import type { HeatmapCell, WellnessPolicy } from '@/types/wellness'
+import type { TeamOption } from '@/types/sessions'
+import { useI18n } from '@/lib/i18n/I18nProvider'
+import { useTheme } from '@/lib/theme/ThemeProvider'
+
+const formatDate = (value: string | Date) =>
+  format(new Date(value), "EEEE d MMM yyyy", { locale: it })
 
 export default function WellnessPage() {
-  // State for table data
-  const [data, setData] = useState<WellnessSummary[]>([])
-  const [loading, setLoading] = useState(true)
+  const { t } = useI18n()
+  const { primaryColor, accentColor } = useTheme()
+  const [teams, setTeams] = useState<TeamOption[]>([])
+  const [teamId, setTeamId] = useState<string>('')
+  const [targetDate, setTargetDate] = useState<string>(() => new Date().toISOString().slice(0, 10))
+
+  const [cells, setCells] = useState<HeatmapCell[]>([])
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // State for filters
-  const [fromDate, setFromDate] = useState<string>('')
-  const [toDate, setToDate] = useState<string>('')
-  const [roleFilter, setRoleFilter] = useState<string>('')
-  const [searchQuery, setSearchQuery] = useState<string>('')
-  const [currentSort, setCurrentSort] = useState<string>('cognome_asc')
+  const [policies, setPolicies] = useState<WellnessPolicy[]>([])
 
-  // State for drawer
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [selectedPlayer, setSelectedPlayer] = useState<WellnessSummary | null>(null)
-  const [playerEntries, setPlayerEntries] = useState<WellnessEntry[]>([])
-  const [loadingEntries, setLoadingEntries] = useState(false)
+  const loadTeams = useCallback(async () => {
+    try {
+      const fetchedTeams = await fetchTeams()
+      setTeams(fetchedTeams)
+      if (!teamId && fetchedTeams.length) {
+        setTeamId(fetchedTeams[0].id)
+      }
+    } catch (err) {
+      console.warn('[Wellness] Impossibile caricare le squadre', err)
+      setTeams([])
+    }
+  }, [teamId])
 
-  // Fetch wellness summary data
-  const fetchData = async () => {
+  const loadHeatmap = useCallback(async () => {
+    if (!teamId) return
     try {
       setLoading(true)
       setError(null)
-
-      const params: any = {
-        sort: currentSort,
-        page: 1,
-        page_size: 100,
-      }
-
-      if (fromDate) params.from = fromDate
-      if (toDate) params.to = toDate
-      if (roleFilter) params.role = roleFilter
-      if (searchQuery) params.search = searchQuery
-
-      const result = await getWellnessSummary(params)
-      setData(result)
+      const response = await fetchTeamHeatmap(teamId, targetDate)
+      setCells(response.cells)
     } catch (err) {
-      console.error('Error fetching wellness summary:', err)
-      setError(err instanceof Error ? err.message : 'Errore nel caricamento dei dati')
+      const message = t('wellness.error', 'Impossibile caricare la heatmap wellness')
+      setError(message)
+      setCells([])
     } finally {
       setLoading(false)
     }
-  }
+  }, [teamId, targetDate, t])
 
-  // Fetch data on mount and when filters change
-  useEffect(() => {
-    fetchData()
-  }, [fromDate, toDate, roleFilter, searchQuery, currentSort])
-
-  // Handle row click - open drawer
-  const handleRowClick = async (playerId: string) => {
-    const player = data.find((p) => p.player_id === playerId)
-    if (!player) return
-
-    setSelectedPlayer(player)
-    setDrawerOpen(true)
-    setLoadingEntries(true)
-
+  const loadPolicies = useCallback(async () => {
     try {
-      const params: any = {}
-      if (fromDate) params.from = fromDate
-      if (toDate) params.to = toDate
-
-      const entries = await getPlayerWellnessEntries(playerId, params)
-      setPlayerEntries(entries)
+      const data = await fetchWellnessPolicies()
+      setPolicies(data)
     } catch (err) {
-      console.error('Error fetching player entries:', err)
-      setPlayerEntries([])
-    } finally {
-      setLoadingEntries(false)
+      console.warn('[Wellness] Impossibile caricare le policy wellness', err)
     }
-  }
+  }, [])
 
-  // Handle drawer close
-  const handleDrawerClose = () => {
-    setDrawerOpen(false)
-    setSelectedPlayer(null)
-    setPlayerEntries([])
-  }
+  useEffect(() => {
+    loadTeams()
+    loadPolicies()
+  }, [loadTeams, loadPolicies])
 
-  // Reset filters
-  const handleResetFilters = () => {
-    setFromDate('')
-    setToDate('')
-    setRoleFilter('')
-    setSearchQuery('')
-  }
+  useEffect(() => {
+    loadHeatmap()
+  }, [loadHeatmap])
+
+  const selectedTeamName = useMemo(() => teams.find((team) => team.id === teamId)?.name ?? '—', [teams, teamId])
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Sessioni Wellness</h1>
-        <p className="text-gray-600">Monitora lo stato di benessere dei giocatori</p>
-      </div>
-
-      {/* Error message */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-          <div className="flex justify-between items-center">
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-700 hover:text-red-900">
-              ×
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Date from */}
+    <div className="container mx-auto px-4 py-10">
+      <header className="mb-8">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Data inizio
-            </label>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <h1 className="text-3xl font-semibold" style={{ color: primaryColor }}>
+              {t('wellness.title', 'Wellness Heatmap')}
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-gray-600">
+              {t(
+                'wellness.subtitle',
+                'Controlla readiness, alert attivi e variazioni giorno su giorno per ogni atleta. Seleziona la squadra e il giorno di interesse per preparare il briefing di staff o seguire l’andamento di microcicli e viaggi.'
+              )}
+            </p>
           </div>
-
-          {/* Date to */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Data fine
-            </label>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* Role filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Ruolo
-            </label>
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Tutti i ruoli</option>
-              <option value="GK">Portiere (GK)</option>
-              <option value="DF">Difensore (DF)</option>
-              <option value="MF">Centrocampista (MF)</option>
-              <option value="FW">Attaccante (FW)</option>
-            </select>
-          </div>
-
-          {/* Search */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Cerca giocatore
-            </label>
-            <input
-              type="text"
-              placeholder="Nome o cognome..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        {/* Reset button */}
-        {(fromDate || toDate || roleFilter || searchQuery) && (
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={handleResetFilters}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 underline"
-            >
-              Azzera filtri
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Stats summary */}
-      {!loading && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <svg
-                className="h-5 w-5 text-blue-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              {t('sessions.header.team', 'Squadra')}
+              <select
+                value={teamId}
+                onChange={(event) => setTeamId(event.target.value)}
+                className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <span className="text-sm text-blue-800">
-                <strong>{data.length}</strong> giocator{data.length === 1 ? 'e' : 'i'} trovat{data.length === 1 ? 'o' : 'i'}
-                {(fromDate || toDate) && ' nel periodo selezionato'}
-              </span>
-            </div>
-            <span className="text-xs text-blue-600">
-              Clicca su un giocatore per vedere i dettagli
-            </span>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              {t('sessions.header.date', 'Data')}
+              <input
+                type="date"
+                value={targetDate}
+                onChange={(event) => setTargetDate(event.target.value)}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </label>
+          </div>
+        </div>
+        <p className="mt-4 text-xs text-gray-500">
+          Vista corrente: <span className="font-semibold text-gray-700">{selectedTeamName}</span> •{' '}
+          {formatDate(targetDate)}
+        </p>
+      </header>
+
+      {error && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="flex items-center justify-between">
+            <p>{error}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null)
+                loadHeatmap()
+              }}
+              className="text-xs font-semibold text-red-700 underline"
+            >
+              {t('common.retry', 'Riprova')}
+            </button>
           </div>
         </div>
       )}
 
-      {/* Wellness Table */}
-      <WellnessTable
-        data={data}
-        loading={loading}
-        onRowClick={handleRowClick}
-        onSort={setCurrentSort}
-        currentSort={currentSort}
-      />
+      <HeatmapGrid cells={cells} loading={loading && !cells.length} emptyMessage={t('wellness.empty', 'Nessun atleta registrato per questa squadra.')} />
 
-      {/* Player Drawer */}
-      {selectedPlayer && (
-        <WellnessPlayerDrawer
-          isOpen={drawerOpen}
-          onClose={handleDrawerClose}
-          playerName={selectedPlayer.nome}
-          playerSurname={selectedPlayer.cognome}
-          playerId={selectedPlayer.player_id}
-          entries={playerEntries}
-          loading={loadingEntries}
-        />
+      {policies.length > 0 && (
+        <section className="mt-10 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+          <header className="mb-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: accentColor }}>
+              {t('wellness.policy.heading', 'Policy di alert e soglie')}
+            </h2>
+          </header>
+          <div className="grid gap-4 md:grid-cols-2">
+            {policies.map((policy) => (
+              <div key={policy.id} className="rounded-md border border-gray-100 bg-gray-50/80 p-4">
+                <p className="text-sm font-semibold text-gray-900">{policy.name}</p>
+                {policy.description && <p className="mt-1 text-xs text-gray-600">{policy.description}</p>}
+                <div className="mt-3 text-xs text-gray-500">
+                  <p>Cooldown: {policy.cooldown_hours}h</p>
+                  <p>Completezza minima dati: {(policy.min_data_completeness * 100).toFixed(0)}%</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   )

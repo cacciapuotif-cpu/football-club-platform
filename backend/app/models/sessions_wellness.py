@@ -21,9 +21,13 @@ class Athlete(SQLModel, table=True):
     """Athlete entity mapped to athletes table."""
 
     __tablename__ = "athletes"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "player_id", name="uix_athletes_player"),
+    )
 
     athlete_id: UUID = Field(default_factory=uuid4, primary_key=True)
     tenant_id: UUID = Field(index=True)
+    player_id: Optional[UUID] = Field(default=None, foreign_key="players.id", index=True)
     pii_token: Optional[str] = Field(default=None, max_length=255)
     status: AthleteStatus = Field(default=AthleteStatus.ACTIVE, sa_column=Column(String(50), nullable=False))
     created_at: datetime = Field(
@@ -192,4 +196,26 @@ class Alert(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
+    )
+
+
+class WellnessPolicy(SQLModel, table=True):
+    """Policy definitions for wellness alerts."""
+
+    __tablename__ = "wellness_policies"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    tenant_id: UUID = Field(index=True, nullable=False)
+    name: str = Field(max_length=120)
+    description: Optional[str] = Field(default=None, sa_column=Column(Text()))
+    thresholds: Optional[dict] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    cooldown_hours: int = Field(default=24)
+    min_data_completeness: float = Field(default=0.8)
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
+    )
+    updated_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False),
     )
