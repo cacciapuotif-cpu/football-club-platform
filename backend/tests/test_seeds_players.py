@@ -15,7 +15,9 @@ Validates:
 """
 
 import pytest
+import yaml
 from datetime import date
+from pathlib import Path
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -292,6 +294,30 @@ class TestPlayerSeedFKResolution:
 
         assert resolved is None
 
+
+def _date_18_years_ago(reference: date) -> date:
+    """Return the date exactly 18 years before reference, handling leap years."""
+    try:
+        return reference.replace(year=reference.year - 18)
+    except ValueError:
+        # Handle Feb 29 → Feb 28 in non-leap year
+        return reference.replace(month=2, day=28, year=reference.year - 18)
+
+
+def test_demo_dataset_players_are_minors():
+    """Ensure DEMO_10x10 player dataset only contains under-18 players."""
+    dataset_path = Path(__file__).resolve().parents[1] / "seeds" / "datasets" / "demo.yaml"
+    with dataset_path.open(encoding="utf-8") as handle:
+        dataset = yaml.safe_load(handle)
+
+    players = dataset.get("05-players", [])
+    assert len(players) == 10, "Expected exactly 10 demo players"
+
+    cutoff = _date_18_years_ago(date.today())
+    for entry in players:
+        dob = date.fromisoformat(entry["date_of_birth"])
+        assert dob > cutoff, f"Player {entry.get('first_name')} {entry.get('last_name')} is not under 18"
+        assert entry.get("is_minor") is True, "Expected is_minor flag to be true for demo players"
     def test_resolve_team_by_name(self, db_session: Session):
         """Test team resolution by name."""
         org = Organization(

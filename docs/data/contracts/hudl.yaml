@@ -1,0 +1,39 @@
+version: 1.0.0
+vendor: hudl
+description: External integration contract for Hudl session and video data
+owner: partnerships
+authentication:
+  type: oauth2_client_credentials
+  scopes: ["sessions.read", "videos.read"]
+  token_endpoint: https://api.hudl.com/oauth/token
+endpoints:
+  - name: sessions
+    path: /api/v2/sessions
+    method: GET
+    cadence: daily
+    parameters:
+      - name: teamId
+        type: string
+        required: true
+      - name: fromDate
+        type: date
+        required: true
+      - name: toDate
+        type: date
+        required: true
+  - name: video-tags
+    path: /api/v2/videos/{videoId}/tags
+    method: GET
+    cadence: post-event
+quotas:
+  rate_limit_per_day: 1000
+  concurrent_requests: 5
+mapping:
+  sessions: docs/data/contracts/sessions.yaml
+  videos: docs/data/contracts/videos.yaml
+slo:
+  availability: 99.0%
+  data_latency: PT6H
+notes:
+  - Requires consent for sharing minors’ footage; ensure DPA in place.
+

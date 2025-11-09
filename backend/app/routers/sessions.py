@@ -1,197 +1,240 @@
-"""Training sessions API router."""
+"""Sessions API - read endpoints."""
 
-from datetime import date
-from typing import Annotated
+from datetime import datetime, timedelta
+from typing import Annotated, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
 from app.database import get_session
 from app.dependencies import get_current_user
-from app.models.session import TrainingSession
+from app.models.sessions_wellness import (
+    Alert,
+    Prediction,
+    Session,
+    SessionParticipation,
+    SessionType,
+    WellnessReading,
+)
 from app.models.user import User
-from app.schemas.session import (
-    TrainingSessionCreate,
-    TrainingSessionResponse,
-    TrainingSessionUpdate,
+from app.schemas.sessions_wellness import (
+    SessionDetail,
+    SessionListItem,
+    SessionParticipationItem,
+    SessionWellnessSnapshot,
+    SnapshotAlert,
+    SnapshotPrediction,
+    WellnessMetricPoint,
+    SessionsPage,
 )
 
 router = APIRouter()
 
 
-@router.post("/", response_model=TrainingSessionResponse, status_code=status.HTTP_201_CREATED)
-async def create_session(
-    session_data: TrainingSessionCreate,
+@router.get(
+    "/",
+    response_model=SessionsPage,
+    summary="List sessions",
+    description="Return paginated sessions filtered by team, type, and date window.",
+)
+async def list_sessions(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-):
-    """Create a new training session."""
-    training_session = TrainingSession(
-        **session_data.model_dump(),
-        organization_id=current_user.organization_id
-    )
-    session.add(training_session)
-    await session.commit()
-    await session.refresh(training_session)
-    return training_session
-
-
-async def get_demo_org_id(session: AsyncSession) -> UUID:
-    """Get the first organization ID for demo purposes (no auth)."""
-    from app.models.organization import Organization
-    result = await session.execute(select(Organization.id).limit(1))
-    org_id = result.scalar_one_or_none()
-    if not org_id:
-        from fastapi import HTTPException, status
-        raise HTTPException(status_code=404, detail="No organization found. Please run seed script.")
-    return org_id
-
-
-@router.get("/", response_model=list[TrainingSessionResponse])
-async def list_sessions(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    team_id: UUID | None = Query(None, description="Filter by team"),
-    player_id: UUID | None = Query(None, description="Filter by player (TEAM 2)"),
-    type: str | None = Query(None, description="Filter by session type (e.g., 'training', 'match') - TEAM 2"),
-    start_date: date | None = Query(None, description="Filter sessions from this date"),
-    end_date: date | None = Query(None, description="Filter sessions until this date"),
-):
-    """
-    List training sessions for the demo organization (no auth).
-
-    **Team 2 Enhancement**: Added player_id and type filters for DEMO_10x10 verification.
-    """
-    # Get demo organization ID
-    org_id = await get_demo_org_id(session)
-
-    # TEAM 3: Implement proper JOIN with PlayerSession for player_id filter
-    if player_id:
-        from app.models.player_session import PlayerSession
-        # JOIN with player_session to filter sessions by player
-        query = (
-            select(TrainingSession)
-            .join(PlayerSession, TrainingSession.id == PlayerSession.session_id)
-            .where(
-                TrainingSession.organization_id == org_id,
-                PlayerSession.player_id == player_id
-            )
-        )
-    else:
-        query = select(TrainingSession).where(
-            TrainingSession.organization_id == org_id
-        )
+    team_id: UUID | None = Query(None, alias="teamId"),
+    session_type: Optional[str] = Query(None, alias="type", description="Session type (training, match, recovery, other)"),
+    from_ts: Optional[datetime] = Query(None, alias="from"),
+    to_ts: Optional[datetime] = Query(None, alias="to"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, alias="pageSize", ge=1, le=200),
+) -> SessionsPage:
+    filters = [Session.tenant_id == current_user.organization_id]
 
     if team_id:
-        query = query.where(TrainingSession.team_id == team_id)
+        filters.append(Session.team_id == team_id)
 
-    # TEAM 3: Type filter using session_type field
-    if type:
-        from app.models.session import SessionType
-        # Map string to enum
-        type_map = {
-            "training": SessionType.TRAINING,
-            "match": SessionType.MATCH,
-            "friendly": SessionType.FRIENDLY,
-            "recovery": SessionType.RECOVERY,
-        }
-        session_type_enum = type_map.get(type.lower())
-        if session_type_enum:
-            query = query.where(TrainingSession.session_type == session_type_enum)
+    if session_type:
+        try:
+            session_type_enum = SessionType(session_type.lower())
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Unsupported session type: {session_type}",
+            ) from exc
+        filters.append(Session.type == session_type_enum)
 
-    if start_date:
-        query = query.where(TrainingSession.session_date >= start_date)
-    if end_date:
-        query = query.where(TrainingSession.session_date <= end_date)
+    if from_ts:
+        filters.append(Session.start_ts >= from_ts)
+    if to_ts:
+        filters.append(Session.start_ts <= to_ts)
 
-    query = query.offset(skip).limit(limit).order_by(TrainingSession.session_date.desc())
+    count_stmt = select(func.count()).select_from(Session).where(*filters)
+    total = (await session.execute(count_stmt)).scalar_one()
 
-    result = await session.execute(query)
+    offset = (page - 1) * page_size
+
+    data_stmt = (
+        select(Session)
+        .where(*filters)
+        .order_by(Session.start_ts.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    result = await session.execute(data_stmt)
     sessions = result.scalars().all()
 
-    return sessions
+    items = [SessionListItem.model_validate(obj) for obj in sessions]
+    has_next = offset + len(items) < total
+
+    return SessionsPage(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        has_next=has_next,
+    )
 
 
-@router.get("/{session_id}", response_model=TrainingSessionResponse)
+@router.get(
+    "/{session_id}",
+    response_model=SessionDetail,
+    summary="Get session detail",
+    description="Retrieve session metadata and participation for the specified session.",
+)
 async def get_session(
     session_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-):
-    """Get a specific training session."""
-    result = await session.execute(
-        select(TrainingSession).where(
-            TrainingSession.id == session_id,
-            TrainingSession.organization_id == current_user.organization_id
-        )
+) -> SessionDetail:
+    session_stmt = select(Session).where(
+        Session.session_id == session_id,
+        Session.tenant_id == current_user.organization_id,
     )
-    training_session = result.scalar_one_or_none()
+    result = await session.execute(session_stmt)
+    session_row = result.scalar_one_or_none()
+    if not session_row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
-    if not training_session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Training session not found"
-        )
-
-    return training_session
-
-
-@router.patch("/{session_id}", response_model=TrainingSessionResponse)
-async def update_session(
-    session_id: UUID,
-    session_data: TrainingSessionUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
-    session: Annotated[AsyncSession, Depends(get_session)],
-):
-    """Update a training session."""
-    result = await session.execute(
-        select(TrainingSession).where(
-            TrainingSession.id == session_id,
-            TrainingSession.organization_id == current_user.organization_id
-        )
+    participation_stmt = select(SessionParticipation).where(
+        SessionParticipation.session_id == session_id,
+        SessionParticipation.tenant_id == current_user.organization_id,
     )
-    training_session = result.scalar_one_or_none()
+    participation_rows = (await session.execute(participation_stmt)).scalars().all()
 
-    if not training_session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Training session not found"
-        )
-
-    update_data = session_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(training_session, field, value)
-
-    session.add(training_session)
-    await session.commit()
-    await session.refresh(training_session)
-    return training_session
+    return SessionDetail(
+        session=SessionListItem.model_validate(session_row),
+        participation=[SessionParticipationItem.model_validate(row) for row in participation_rows],
+    )
 
 
-@router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_session(
+@router.get(
+    "/{session_id}/wellness_snapshot",
+    response_model=SessionWellnessSnapshot,
+    summary="Session wellness snapshot",
+    description="Summarise wellness metrics, predictions, and alerts around the session window for participating athletes.",
+)
+async def get_session_wellness_snapshot(
     session_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-):
-    """Delete a training session."""
-    result = await session.execute(
-        select(TrainingSession).where(
-            TrainingSession.id == session_id,
-            TrainingSession.organization_id == current_user.organization_id
-        )
+    window_days: int = Query(2, ge=1, le=7),
+) -> SessionWellnessSnapshot:
+    session_stmt = select(Session).where(
+        Session.session_id == session_id,
+        Session.tenant_id == current_user.organization_id,
     )
-    training_session = result.scalar_one_or_none()
+    result = await session.execute(session_stmt)
+    session_row = result.scalar_one_or_none()
+    if not session_row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
-    if not training_session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Training session not found"
+    participation_stmt = select(SessionParticipation).where(
+        SessionParticipation.session_id == session_id,
+        SessionParticipation.tenant_id == current_user.organization_id,
+    )
+    participation_rows = (await session.execute(participation_stmt)).scalars().all()
+    athlete_ids = [row.athlete_id for row in participation_rows]
+
+    window_start = session_row.start_ts - timedelta(days=window_days)
+    window_end = session_row.start_ts + timedelta(days=window_days)
+
+    metrics: list[WellnessMetricPoint] = []
+    predictions: list[SnapshotPrediction] = []
+    alerts: list[SnapshotAlert] = []
+
+    if athlete_ids:
+        metrics_stmt = select(WellnessReading).where(
+            WellnessReading.tenant_id == current_user.organization_id,
+            WellnessReading.athlete_id.in_(athlete_ids),
+            WellnessReading.event_ts >= window_start,
+            WellnessReading.event_ts <= window_end,
         )
+        metric_rows = (await session.execute(metrics_stmt)).scalars().all()
+        metrics = [
+            WellnessMetricPoint.model_validate(
+                {
+                    "athlete_id": row.athlete_id,
+                    "metric": row.metric,
+                    "value": row.value,
+                    "unit": row.unit,
+                    "event_ts": row.event_ts,
+                }
+            )
+            for row in metric_rows
+        ]
 
-    await session.delete(training_session)
-    await session.commit()
-    return None
+        predictions_stmt = select(Prediction).where(
+            Prediction.tenant_id == current_user.organization_id,
+            Prediction.athlete_id.in_(athlete_ids),
+            Prediction.event_ts >= window_start,
+            Prediction.event_ts <= window_end,
+        )
+        prediction_rows = (await session.execute(predictions_stmt)).scalars().all()
+        predictions = [
+            SnapshotPrediction.model_validate(
+                {
+                    "athlete_id": row.athlete_id,
+                    "score": row.score,
+                    "severity": row.severity,
+                    "model_version": row.model_version,
+                    "event_ts": row.event_ts,
+                    "drivers": row.drivers,
+                }
+            )
+            for row in prediction_rows
+        ]
+
+        alerts_stmt = select(Alert).where(
+            Alert.tenant_id == current_user.organization_id,
+            Alert.athlete_id.in_(athlete_ids),
+            Alert.opened_at >= window_start,
+            Alert.opened_at <= window_end,
+        )
+        alert_rows = (await session.execute(alerts_stmt)).scalars().all()
+        alerts = [
+            SnapshotAlert.model_validate(
+                {
+                    "id": row.id,
+                    "athlete_id": row.athlete_id,
+                    "session_id": row.session_id,
+                    "status": row.status,
+                    "severity": row.severity,
+                    "opened_at": row.opened_at,
+                    "closed_at": row.closed_at,
+                    "policy_id": row.policy_id,
+                }
+            )
+            for row in alert_rows
+        ]
+
+    return SessionWellnessSnapshot(
+        session_id=session_id,
+        window_days=window_days,
+        window_start=window_start,
+        window_end=window_end,
+        athletes=athlete_ids,
+        metrics=metrics,
+        predictions=predictions,
+        alerts=alerts,
+    )

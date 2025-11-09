@@ -15,7 +15,7 @@ from sqlalchemy import create_engine
 from sqlmodel import Session, select
 from passlib.context import CryptContext
 
-from app.config import settings
+from backend.app.config import settings
 from app.models import Organization, Season, Team, Player, TrainingSession, User, SensorData
 from app.models.player import PlayerRole, DominantFoot, DominantArm
 from app.models.session import SessionType

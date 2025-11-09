@@ -6,7 +6,7 @@ Gestionale innovativo per società di calcio.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from prometheus_client import Counter, Histogram, generate_latest
@@ -16,6 +16,7 @@ from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.database import init_db
+from app.dependencies import get_current_user
 
 # Configure logging
 logging.basicConfig(level=settings.LOG_LEVEL)
@@ -258,6 +259,7 @@ from app.routers import (
     metrics,
     ml_analytics,
     ml_predict,
+    ml_readiness,
     ml_reports,
     performance,
     plans,
@@ -279,42 +281,45 @@ from app.ml.api import endpoints as youth_ml
 api_prefix = f"/api/{settings.API_VERSION}"
 
 # Register routers
+protected_dependencies = [Depends(get_current_user)]
+
 app.include_router(auth.router, prefix=f"{api_prefix}/auth", tags=["Authentication"])
-app.include_router(players.router, prefix=f"{api_prefix}/players", tags=["Players"])
-app.include_router(sessions.router, prefix=f"{api_prefix}/sessions", tags=["Training Sessions"])
-app.include_router(training.router, prefix=f"{api_prefix}/training", tags=["Training & RPE"])
-app.include_router(metrics.router, prefix=f"{api_prefix}/metrics", tags=["Metrics & Readiness"])
-app.include_router(alerts.router, prefix=f"{api_prefix}/alerts", tags=["Alerts & Notifications"])
-app.include_router(wellness.router, prefix=f"{api_prefix}/wellness", tags=["Wellness Data"])
-app.include_router(performance.router, prefix=f"{api_prefix}/performance", tags=["Performance Modules"])
-app.include_router(analytics.router, prefix=f"{api_prefix}/analytics", tags=["Analytics & Reports"])
-app.include_router(ml_analytics.router, prefix=api_prefix, tags=["ML Analytics"])
-app.include_router(advanced_analytics.router, prefix=f"{api_prefix}/advanced-analytics", tags=["Advanced ML Analytics & Scouting"])
-app.include_router(advanced_tracking.router, prefix=f"{api_prefix}/tracking", tags=["Advanced Tracking"])
-app.include_router(ml_predict.router, prefix=f"{api_prefix}/ml", tags=["ML Predictions"])
-app.include_router(ml_reports.router)  # ML Reports & Predictions (has its own prefix)
-app.include_router(youth_ml.router, prefix=f"{api_prefix}/youth-ml", tags=["Youth ML - Performance & Development"])
+app.include_router(players.router, prefix=f"{api_prefix}/players", tags=["Players"], dependencies=protected_dependencies)
+app.include_router(sessions.router, prefix=f"{api_prefix}/sessions", tags=["Training Sessions"], dependencies=protected_dependencies)
+app.include_router(training.router, prefix=f"{api_prefix}/training", tags=["Training & RPE"], dependencies=protected_dependencies)
+app.include_router(metrics.router, prefix=f"{api_prefix}/metrics", tags=["Metrics & Readiness"], dependencies=protected_dependencies)
+app.include_router(alerts.router, prefix=f"{api_prefix}/alerts", tags=["Alerts & Notifications"], dependencies=protected_dependencies)
+app.include_router(wellness.router, prefix=f"{api_prefix}/wellness", tags=["Wellness Data"], dependencies=protected_dependencies)
+app.include_router(performance.router, prefix=f"{api_prefix}/performance", tags=["Performance Modules"], dependencies=protected_dependencies)
+app.include_router(analytics.router, prefix=f"{api_prefix}/analytics", tags=["Analytics & Reports"], dependencies=protected_dependencies)
+app.include_router(ml_analytics.router, prefix=api_prefix, tags=["ML Analytics"], dependencies=protected_dependencies)
+app.include_router(advanced_analytics.router, prefix=f"{api_prefix}/advanced-analytics", tags=["Advanced ML Analytics & Scouting"], dependencies=protected_dependencies)
+app.include_router(advanced_tracking.router, prefix=f"{api_prefix}/tracking", tags=["Advanced Tracking"], dependencies=protected_dependencies)
+app.include_router(ml_predict.router, prefix=f"{api_prefix}/ml", tags=["ML Predictions"], dependencies=protected_dependencies)
+app.include_router(ml_readiness.router, prefix=f"{api_prefix}/ml", tags=["ML Readiness"], dependencies=protected_dependencies)
+app.include_router(ml_reports.router, dependencies=protected_dependencies)  # ML Reports & Predictions (has its own prefix)
+app.include_router(youth_ml.router, prefix=f"{api_prefix}/youth-ml", tags=["Youth ML - Performance & Development"], dependencies=protected_dependencies)
 
 # ============================================
 # NEW ROUTERS - Player Progress & ML Insights
 # ============================================
-app.include_router(progress.router, prefix=api_prefix, tags=["Player Progress Tracking"])
-app.include_router(progress_ml.router, prefix=f"{api_prefix}/progress-ml", tags=["Progress ML - Risk & Insights"])
+app.include_router(progress.router, prefix=api_prefix, tags=["Player Progress Tracking"], dependencies=protected_dependencies)
+app.include_router(progress_ml.router, prefix=f"{api_prefix}/progress-ml", tags=["Progress ML - Risk & Insights"], dependencies=protected_dependencies)
 
 # ============================================
 # TEAM 2 ROUTERS - Predictions & Prescriptions
 # ============================================
-app.include_router(predictions.router, prefix=f"{api_prefix}/predictions", tags=["Predictions - Injury Risk"])
-app.include_router(prescriptions.router, prefix=f"{api_prefix}/prescriptions", tags=["Prescriptions - Training Recommendations"])
+app.include_router(predictions.router, prefix=f"{api_prefix}/predictions", tags=["Predictions - Injury Risk"], dependencies=protected_dependencies)
+app.include_router(prescriptions.router, prefix=f"{api_prefix}/prescriptions", tags=["Prescriptions - Training Recommendations"], dependencies=protected_dependencies)
 
 # ============================================
 # NEW CRITICAL ROUTERS - FULLY IMPLEMENTED
 # ============================================
-app.include_router(teams.router, prefix=f"{api_prefix}/teams", tags=["Teams & Seasons"])
-app.include_router(matches.router, prefix=f"{api_prefix}/matches", tags=["Matches & Attendance"])
-app.include_router(plans.router, prefix=f"{api_prefix}/plans", tags=["Training Plans & Adherence"])
-app.include_router(reports.router, prefix=f"{api_prefix}/reports", tags=["Reports & PDF Generation"])
-app.include_router(quick_input.router, prefix=f"{api_prefix}/quick", tags=["Quick Input - Mobile Optimized"])
+app.include_router(teams.router, prefix=f"{api_prefix}/teams", tags=["Teams & Seasons"], dependencies=protected_dependencies)
+app.include_router(matches.router, prefix=f"{api_prefix}/matches", tags=["Matches & Attendance"], dependencies=protected_dependencies)
+app.include_router(plans.router, prefix=f"{api_prefix}/plans", tags=["Training Plans & Adherence"], dependencies=protected_dependencies)
+app.include_router(reports.router, prefix=f"{api_prefix}/reports", tags=["Reports & PDF Generation"], dependencies=protected_dependencies)
+app.include_router(quick_input.router, prefix=f"{api_prefix}/quick", tags=["Quick Input - Mobile Optimized"], dependencies=protected_dependencies)
 
 # ============================================
 # FUTURE ROUTERS (TODO)

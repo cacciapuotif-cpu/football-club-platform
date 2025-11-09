@@ -136,7 +136,9 @@
       "Bash(gh pr create:*)",
       "Bash(SEED_PROFILE=DEMO_10x10 python:*)",
       "Bash(make seed-demo:*)",
-      "Bash(PLAYER_ID=\"582d673b-e385-4da4-8e75-8782e196dd16\":*)"
+      "Bash(PLAYER_ID=\"582d673b-e385-4da4-8e75-8782e196dd16\":*)",
+      "Bash(export PYTHONPATH=\"$PWD\":*)",
+      "Bash(poetry run python:*)"
     ],
     "deny": [],
     "ask": []

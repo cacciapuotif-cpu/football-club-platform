@@ -9,7 +9,7 @@ import pytest
 from fastapi import status
 from httpx import AsyncClient
 
-from app.config import settings
+from backend.app.config import settings
 
 
 class TestCORSConfiguration:

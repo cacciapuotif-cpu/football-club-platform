@@ -1,110 +1,150 @@
 """FastAPI dependencies for authentication, tenancy, and RBAC."""
 
-import os
-from typing import Annotated
-from uuid import UUID
+from __future__ import annotations
+
+from typing import Annotated, Any, Optional
+from uuid import UUID, uuid4
 
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.database import get_session
+from app.config import settings
+from app.database import get_session, set_rls_context
 from app.models.user import User, UserRole
 from app.security import decode_token
 
-# Make security optional when SKIP_AUTH is enabled
 security = HTTPBearer(auto_error=False)
+
+
+ROLE_ALIAS_MAP = {
+    "org_admin": UserRole.ADMIN,
+    "coach": UserRole.COACH,
+    "analyst": UserRole.ANALYST,
+    "athlete": UserRole.PLAYER,
+    "player": UserRole.PLAYER,
+    "viewer": UserRole.VIEWER,
+}
+
+
+def _resolve_role(role_claim: Any) -> UserRole:
+    if role_claim is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Role claim missing")
+
+    if isinstance(role_claim, (list, tuple)):
+        for candidate in role_claim:
+            mapped = ROLE_ALIAS_MAP.get(str(candidate).lower())
+            if mapped:
+                return mapped
+        role_claim = role_claim[0]
+
+    mapped = ROLE_ALIAS_MAP.get(str(role_claim).lower())
+    if mapped:
+        return mapped
+
+    try:
+        return UserRole(str(role_claim).upper())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Unsupported role: {role_claim}",
+        ) from exc
+
+
+def _extract_claim(claims: dict[str, Any], key: str, *, required: bool = True) -> Optional[str]:
+    value = claims.get(key)
+    if value is None:
+        if required:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Missing claim: {key}")
+        return None
+    if isinstance(value, (list, tuple)) and value:
+        return str(value[0])
+    return str(value)
 
 
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> User:
-    """
-    Get current authenticated user from JWT token.
-    Raises 401 if token is invalid or user not found.
-    Automatically sets RLS tenant_id for multi-tenant isolation.
-
-    In development mode (SKIP_AUTH=true), returns a mock admin user.
-    """
-    # Skip authentication in development mode
-    if os.getenv("SKIP_AUTH", "false").lower() == "true":
-        # Get the first organization from the database for the mock user
-        from app.models.organization import Organization
-        result = await session.execute(select(Organization).limit(1))
-        org = result.scalar_one_or_none()
-
-        if not org:
-            # Fallback to hardcoded org_id if no organization exists
-            org_id = UUID("00000000-0000-0000-0000-000000000001")
-        else:
-            org_id = org.id
-
-        # Return a mock admin user for development
-        mock_user = User(
-            id=UUID("00000000-0000-0000-0000-000000000001"),
+    """Authenticate request and set session-level RLS context."""
+    if settings.SKIP_AUTH:
+        tenant_id = UUID("00000000-0000-0000-0000-0000000000aa")
+        user_id = UUID("00000000-0000-0000-0000-0000000000ab")
+        user = User(
+            id=user_id,
             email="dev@localhost",
             hashed_password="",
-            role=UserRole.OWNER,
+            full_name="Dev User",
+            role=UserRole.ADMIN,
             is_active=True,
-            organization_id=org_id,
+            organization_id=tenant_id,
         )
-        # Set RLS tenant_id for Row Level Security
-        from app.database import set_rls_tenant
-        await set_rls_tenant(session, str(mock_user.organization_id))
-        return mock_user
+        await set_rls_context(
+            session,
+            tenant_id=str(tenant_id),
+            user_id=str(user_id),
+            user_role=user.role.value,
+        )
+        setattr(user, "permissions", [])
+        return user
 
-    # Normal authentication flow
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
-    token = credentials.credentials
-    payload = decode_token(token)
+    claims = decode_token(credentials.credentials)
+    tenant_claim = _extract_claim(claims, settings.OIDC_TENANT_CLAIM or "org_id")
+    user_claim = _extract_claim(claims, settings.OIDC_USER_ID_CLAIM or "sub")
+    email_claim = _extract_claim(claims, settings.OIDC_EMAIL_CLAIM or "email", required=False) or "user@unknown"
+    role_claim = claims.get(settings.OIDC_ROLE_CLAIM or "roles")
 
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    tenant_uuid = UUID(tenant_claim)
+    user_uuid = UUID(user_claim) if user_claim else uuid4()
+    resolved_role = _resolve_role(role_claim)
 
-    result = await session.execute(select(User).where(User.id == UUID(user_id)))
+    result = await session.execute(select(User).where(User.id == user_uuid))
     user = result.scalar_one_or_none()
 
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+    if user is None:
+        user = User(
+            id=user_uuid,
+            email=email_claim,
+            hashed_password="",
+            full_name=email_claim,
+            role=resolved_role,
+            is_active=True,
+            organization_id=tenant_uuid,
+        )
 
-    # Set RLS tenant_id for Row Level Security
-    from app.database import set_rls_tenant
-    await set_rls_tenant(session, str(user.organization_id))
-
+    await set_rls_context(
+        session,
+        tenant_id=str(tenant_uuid),
+        user_id=str(user_uuid),
+        user_role=resolved_role.value,
+    )
+    setattr(user, "permissions", [])
     return user
 
 
 async def get_current_active_user(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
-    """Get current active user (alias for clarity)."""
+    if not current_user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
     return current_user
 
 
 def get_tenant_id(x_tenant_id: Annotated[str | None, Header()] = None) -> UUID | None:
-    """
-    Extract tenant ID from X-Tenant-ID header.
-    Optional: defaults to user's organization_id if not provided.
-    """
     if x_tenant_id:
         try:
             return UUID(x_tenant_id)
-        except ValueError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid X-Tenant-ID format")
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid X-Tenant-ID format") from exc
     return None
 
 
 class RoleChecker:
-    """
-    Dependency to check if user has required role(s).
-    Usage:
-        @router.get("/admin", dependencies=[Depends(RoleChecker([UserRole.OWNER, UserRole.ADMIN]))])
-    """
+    """Dependency to ensure the current user has one of the allowed roles."""
 
     def __init__(self, allowed_roles: list[UserRole]):
         self.allowed_roles = allowed_roles
@@ -118,8 +158,18 @@ class RoleChecker:
         return current_user
 
 
-# Common role checkers
 require_owner = RoleChecker([UserRole.OWNER])
 require_admin = RoleChecker([UserRole.OWNER, UserRole.ADMIN])
-require_staff = RoleChecker([UserRole.OWNER, UserRole.ADMIN, UserRole.COACH, UserRole.ANALYST, UserRole.PHYSIO, UserRole.DOCTOR])
-require_medical = RoleChecker([UserRole.OWNER, UserRole.ADMIN, UserRole.PHYSIO, UserRole.DOCTOR])
+require_staff = RoleChecker(
+    [
+        UserRole.OWNER,
+        UserRole.ADMIN,
+        UserRole.COACH,
+        UserRole.ANALYST,
+        UserRole.MEDICAL,
+        UserRole.PSYCHOLOGIST,
+        UserRole.PHYSIO,
+        UserRole.DOCTOR,
+    ]
+)
+require_medical = RoleChecker([UserRole.OWNER, UserRole.ADMIN, UserRole.MEDICAL, UserRole.PHYSIO, UserRole.DOCTOR])

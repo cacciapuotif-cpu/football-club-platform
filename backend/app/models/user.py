@@ -23,6 +23,9 @@ class UserRole(str, Enum):
     DOCTOR = "DOCTOR"
     PLAYER = "PLAYER"
     PARENT = "PARENT"
+    VIEWER = "VIEWER"
+    MEDICAL = "MEDICAL"
+    PSYCHOLOGIST = "PSYCHOLOGIST"
 
 
 class User(SQLModel, table=True):

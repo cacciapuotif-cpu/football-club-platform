@@ -1,0 +1,75 @@
+version: 1.0.0
+domain: sessions
+description: Training and match session contract (load, attendance, GPS).
+owner: product-team
+sla:
+  ingestion_latency: PT2H
+  update_cadence: hourly
+  completeness_threshold: 0.98
+schema:
+  table: training_sessions
+  primary_key:
+    - session_id
+  fields:
+    - name: session_id
+      type: uuid
+      required: true
+    - name: organization_id
+      type: uuid
+      required: true
+    - name: team_id
+      type: uuid
+      required: true
+    - name: session_date
+      type: timestamptz
+      required: true
+    - name: session_type
+      type: varchar(30)
+      enum: [TRAINING, TECHNICAL, TACTICAL, PHYSICAL, PSYCHOLOGICAL, FRIENDLY, RECOVERY, GYM]
+      required: true
+    - name: duration_min
+      type: integer
+      required: true
+    - name: planned_load
+      type: numeric(8,2)
+      required: false
+    - name: actual_load
+      type: numeric(8,2)
+      required: false
+    - name: rpe_avg
+      type: numeric(4,1)
+      required: false
+    - name: attendance_json
+      type: jsonb
+      required: false
+    - name: gps_metrics_json
+      type: jsonb
+      required: false
+    - name: created_at
+      type: timestamptz
+      default: now()
+    - name: updated_at
+      type: timestamptz
+      default: now()
+quality_rules:
+  - check: duration_min BETWEEN 1 AND 300
+  - check: rpe_avg BETWEEN 1 AND 10 OR NULL
+  - check: actual_load >= 0
+lineage:
+  source_systems:
+    - gps_provider
+    - training_management_system
+  downstream:
+    - readiness_feature_store
+    - reports_engine
+gdpr:
+  legal_basis:
+    - art_6_1_f (legitimate interest)
+    - art_9_2_h (health data for medical purposes)
+  retention_policy: see ../privacy/retention-policy.md
+integrations:
+  - vendor: hudl
+    endpoint: /sessions
+    cadence: daily
+    authentication: oauth2
+

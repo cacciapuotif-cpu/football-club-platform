@@ -5,9 +5,11 @@ from sqlalchemy import pool
 from alembic import context
 import os
 import sys
+from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+BASE_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = BASE_DIR / "backend"
+sys.path.insert(0, str(BACKEND_DIR))
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -18,12 +20,12 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Import Base and models
-from app.db.database import Base
-from app.models import models  # noqa: F401 - Import all models
+# Import models so that SQLModel metadata is populated
+from app.database import SQLModel  # noqa: E402
+from app.models import *  # noqa: F401,F403
 
 # Set target metadata for autogenerate
-target_metadata = Base.metadata
+target_metadata = SQLModel.metadata
 
 # Override sqlalchemy.url from environment variable
 database_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/football_db")

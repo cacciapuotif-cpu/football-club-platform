@@ -1,0 +1,31 @@
+version: 1.0.0
+vendor: gps_provider
+description: GPS workload feed for wearables (Catapult, Playermaker, etc.)
+owner: partnerships
+authentication:
+  type: oauth2_client_credentials
+endpoints:
+  - name: player-load
+    path: /api/v1/load
+    method: GET
+    cadence: hourly
+    parameters:
+      - name: playerExternalId
+        type: string
+        required: true
+      - name: fromTimestamp
+        type: timestamptz
+        required: true
+      - name: toTimestamp
+        type: timestamptz
+        required: true
+quotas:
+  rate_limit_per_hour: 500
+mapping:
+  load -> docs/data/contracts/sessions.yaml
+slo:
+  availability: 99.0%
+  data_latency: PT1H
+notes:
+  - Map external IDs via partnerships registry; ensure GDPR-compliant handling.
+

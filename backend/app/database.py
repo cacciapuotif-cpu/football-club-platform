@@ -70,15 +70,27 @@ async def get_session_context() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def set_rls_tenant(session: AsyncSession, tenant_id: str) -> None:
-    """
-    Set Row Level Security (RLS) tenant_id for current session.
-    This enables Postgres RLS policies to filter data by tenant.
-
-    Note: Uses raw SQL with f-string since asyncpg doesn't support
-    parameterized SET commands. tenant_id is validated as UUID before this call.
-    """
+async def set_rls_context(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    user_id: str | None = None,
+    user_role: str | None = None,
+) -> None:
+    """Set RLS context (tenant, user, role) for the current session."""
     from sqlalchemy import text
-    # asyncpg doesn't support parameterized SET commands, so we use f-string
-    # This is safe because tenant_id is validated as UUID in the caller
-    await session.execute(text(f"SET app.tenant_id = '{tenant_id}'"))
+
+    await session.execute(text("SET app.tenant_id = :tenant_id"), {"tenant_id": tenant_id})
+    if user_id:
+        await session.execute(text("SET app.user_id = :user_id"), {"user_id": user_id})
+    else:
+        await session.execute(text("RESET app.user_id"))
+    if user_role:
+        await session.execute(text("SET app.user_role = :user_role"), {"user_role": user_role})
+    else:
+        await session.execute(text("RESET app.user_role"))
+
+
+async def set_rls_tenant(session: AsyncSession, tenant_id: str) -> None:
+    """Backwards-compatible helper to set only tenant."""
+    await set_rls_context(session, tenant_id=tenant_id)

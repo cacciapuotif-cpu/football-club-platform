@@ -1,0 +1,64 @@
+version: 1.0.0
+domain: testing
+description: Physical/psychological test results contract.
+owner: product-team
+sla:
+  ingestion_latency: P7D
+  update_cadence: weekly
+  completeness_threshold: 0.9
+schema:
+  table: player_tests
+  primary_key:
+    - test_id
+  fields:
+    - name: test_id
+      type: uuid
+      required: true
+    - name: player_id
+      type: uuid
+      required: true
+    - name: organization_id
+      type: uuid
+      required: true
+    - name: test_type
+      type: varchar(50)
+      enum: [CMJ, VO2MAX, SPRINT_30M, YOYO_IR2, QUESTIONNAIRE]
+      required: true
+    - name: test_date
+      type: date
+      required: true
+    - name: score
+      type: numeric(8,3)
+      required: true
+    - name: unit
+      type: varchar(20)
+      required: false
+    - name: percentile
+      type: numeric(5,2)
+      required: false
+    - name: notes
+      type: text
+      required: false
+    - name: created_at
+      type: timestamptz
+      default: now()
+    - name: updated_at
+      type: timestamptz
+      default: now()
+quality_rules:
+  - check: score present and > 0
+  - check: percentile between 0 and 100
+  - check: test_type matches catalog enumerations
+lineage:
+  source_systems:
+    - lab_testing_suite
+    - questionnaire_app
+  downstream:
+    - readiness_feature_store
+    - reports_engine
+gdpr:
+  legal_basis:
+    - art_6_1_a
+    - art_9_2_h
+  retention_policy: see ../privacy/retention-policy.md
+

@@ -27,6 +27,15 @@ from app.models.test import PhysicalTest, TacticalTest, TechnicalTest
 from app.models.wellness import WellnessData
 from app.models.user import User
 from app.models.video import Video, VideoEvent
+from app.models.sessions_wellness import (
+    Athlete,
+    Session,
+    SessionParticipation,
+    WellnessReading,
+    Feature,
+    Prediction,
+    Alert,
+)
 from app.models.advanced_tracking import (
     AutomatedInsight,
     DailyReadiness,
@@ -90,4 +99,11 @@ __all__ = [
     "MetricCatalog",
     "DataQualityLog",
     "DataCompleteness",
+    "Athlete",
+    "Session",
+    "SessionParticipation",
+    "WellnessReading",
+    "Feature",
+    "Prediction",
+    "Alert",
 ]

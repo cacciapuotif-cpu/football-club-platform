@@ -19,7 +19,7 @@ if BASE_DIR not in sys.path:
 
 # --- Importa TUTTI i modelli (popola la metadata)
 from app import models  # noqa: F401  # importa l'__init__ che carica tutti i model
-from app.config import settings
+from backend.app.config import settings
 
 # Alembic Config object
 config = context.config

@@ -3,6 +3,7 @@ Application configuration using Pydantic Settings.
 Loads from environment variables and .env file.
 """
 
+import json
 from functools import lru_cache
 from typing import Literal
 
@@ -36,15 +37,31 @@ class Settings(BaseSettings):
     # CORS Configuration
     # IMPORTANT: Port 3001 is RESERVED for pythonpro - DO NOT USE
     # Frontend should use port 3000 (FCP_WEB_PORT=3000)
-    ALLOWED_ORIGINS: str = "http://localhost:3000"
+    SKIP_AUTH: bool = False
+
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_MAX_AGE: int = 3600
 
-    @field_validator("ALLOWED_ORIGINS")
-    @classmethod
-    def parse_origins(cls, v: str) -> list[str]:
-        """Parse comma-separated list of allowed origins for CORS."""
-        return [origin.strip() for origin in v.split(",")]
+#     @field_validator("ALLOWED_ORIGINS", mode="before")
+#     @classmethod
+#     def parse_origins(cls, value: str | list[str]) -> list[str]:
+#         """Parse comma-separated list of allowed origins for CORS."""
+#         if isinstance(value, list):
+#             return [origin.strip() for origin in value if origin]
+#         if isinstance(value, str):
+#             stripped = value.strip()
+#             if stripped.startswith("["):
+#                 try:
+#                     import json
+# 
+#                     parsed = json.loads(stripped)
+#                     if isinstance(parsed, list):
+#                         return [str(item).strip() for item in parsed if str(item).strip()]
+#                 except (json.JSONDecodeError, TypeError):
+#                     pass
+#             return [origin.strip() for origin in stripped.split(",") if origin.strip()]
+#         raise TypeError("ALLOWED_ORIGINS must be str or list[str]")
 
     # Database
     DATABASE_URL: str
@@ -56,6 +73,17 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"
     REDIS_MAX_CONNECTIONS: int = 50
     QUEUE_BACKEND: Literal["rq", "celery"] = "rq"
+
+    # OIDC / JWT
+    OIDC_ISSUER: str | None = None
+    OIDC_AUDIENCE: str | None = None
+    OIDC_JWKS_URL: str | None = None
+    OIDC_JWKS_CACHE_SECONDS: int = 300
+    OIDC_HTTP_TIMEOUT: float = 5.0
+    OIDC_ROLE_CLAIM: str = "roles"
+    OIDC_TENANT_CLAIM: str = "org_id"
+    OIDC_USER_ID_CLAIM: str = "sub"
+    OIDC_EMAIL_CLAIM: str = "email"
 
     # Storage
     STORAGE_BACKEND: Literal["local", "s3"] = "local"

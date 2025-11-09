@@ -1,0 +1,178 @@
+# Unified Data Schema — Sessions & Wellness Domain
+
+version: 1
+datasets:
+  sessions:
+    description: Training sessions and planning metadata.
+    primary_key: session_id
+    fields:
+      - name: session_id
+        type: uuid
+        nullable: false
+      - name: tenant_id
+        type: uuid
+        nullable: false
+      - name: team_id
+        type: uuid
+        nullable: false
+      - name: session_type
+        type: enum
+        enum:
+          - TRAINING
+          - MATCH
+          - RECOVERY
+          - GYM
+          - REHAB
+      - name: start_ts
+        type: timestamp_tz
+      - name: end_ts
+        type: timestamp_tz
+      - name: rpe_avg
+        type: numeric
+        precision: 4
+        scale: 1
+      - name: load
+        type: numeric
+        precision: 8
+        scale: 2
+      - name: notes
+        type: text
+  session_participation:
+    description: Athlete attendance and load details per session.
+    primary_key: id
+    fields:
+      - name: id
+        type: uuid
+      - name: tenant_id
+        type: uuid
+      - name: session_id
+        type: uuid
+      - name: athlete_id
+        type: uuid
+      - name: status
+        type: enum
+        enum:
+          - FULL
+          - MODIFIED
+          - REST
+      - name: rpe
+        type: numeric
+        precision: 4
+        scale: 1
+      - name: load
+        type: numeric
+        precision: 8
+        scale: 2
+  wellness_readings:
+    description: Daily wellness survey metrics.
+    primary_key: id
+    fields:
+      - name: id
+        type: uuid
+      - name: tenant_id
+        type: uuid
+      - name: athlete_id
+        type: uuid
+      - name: source
+        type: text
+      - name: metric
+        type: enum
+        enum:
+          - SLEEP_QUALITY
+          - SORENESS
+          - STRESS
+          - MOOD
+          - READINESS
+      - name: value
+        type: numeric
+        precision: 5
+        scale: 2
+      - name: unit
+        type: text
+      - name: event_ts
+        type: timestamp_tz
+      - name: ingest_ts
+        type: timestamp_tz
+      - name: quality_score
+        type: numeric
+        precision: 5
+        scale: 2
+  features:
+    description: Engineered features for readiness model.
+    primary_key:
+      - tenant_id
+      - athlete_id
+      - feature_name
+      - event_ts
+    fields:
+      - name: feature_name
+        type: text
+      - name: feature_value
+        type: numeric
+        precision: 10
+        scale: 4
+  predictions:
+    description: Readiness model output.
+    primary_key: id
+    fields:
+      - name: id
+        type: uuid
+      - name: tenant_id
+        type: uuid
+      - name: athlete_id
+        type: uuid
+      - name: model_version
+        type: text
+      - name: score
+        type: numeric
+        precision: 5
+        scale: 2
+      - name: severity
+        type: enum
+        enum:
+          - LOW
+          - MEDIUM
+          - HIGH
+      - name: drivers
+        type: jsonb
+      - name: event_ts
+        type: timestamp_tz
+      - name: created_at
+        type: timestamp_tz
+  alerts:
+    description: Operational alerts raised from readiness engine.
+    primary_key: id
+    fields:
+      - name: id
+        type: uuid
+      - name: tenant_id
+        type: uuid
+      - name: athlete_id
+        type: uuid
+      - name: session_id
+        type: uuid
+        nullable: true
+      - name: status
+        type: enum
+        enum:
+          - OPEN
+          - ACKNOWLEDGED
+          - CLOSED
+      - name: severity
+        type: enum
+        enum:
+          - LOW
+          - MEDIUM
+          - HIGH
+      - name: policy_id
+        type: uuid
+        nullable: true
+      - name: opened_at
+        type: timestamp_tz
+      - name: closed_at
+        type: timestamp_tz
+        nullable: true
+      - name: ack_by
+        type: uuid
+        nullable: true
+

@@ -87,9 +87,9 @@
   - external_id: "demo-fc-ps-1"
     organization_slug: "demo-fc"
     team_name: "Prima Squadra"
-    first_name: "Gianluigi"
-    last_name: "Donnarumma"
-    date_of_birth: "1999-02-25"
+    first_name: "Matteo"
+    last_name: "Rinaldi"
+    date_of_birth: "2009-03-14"
     nationality: "IT"
     role_primary: "GK"
     dominant_foot: "RIGHT"
@@ -98,7 +98,10 @@
     height_cm: 196
     weight_kg: 90
     is_active: true
-    is_minor: false
+    is_minor: true
+    guardian_name: "Alessandro Rinaldi"
+    guardian_email: "a.rinaldi@example.com"
+    guardian_phone: "+39 333 1010101"
     injury_prone: false
     consent_given: true
     medical_clearance: true
@@ -114,9 +117,9 @@
   - external_id: "demo-fc-ps-19"
     organization_slug: "demo-fc"
     team_name: "Prima Squadra"
-    first_name: "Leonardo"
-    last_name: "Bonucci"
-    date_of_birth: "1987-05-01"
+    first_name: "Luca"
+    last_name: "Moretti"
+    date_of_birth: "2008-07-02"
     nationality: "IT"
     role_primary: "DF"
     dominant_foot: "RIGHT"
@@ -125,7 +128,10 @@
     height_cm: 190
     weight_kg: 85
     is_active: true
-    is_minor: false
+    is_minor: true
+    guardian_name: "Marta Moretti"
+    guardian_email: "m.moretti@example.com"
+    guardian_phone: "+39 333 2020202"
     injury_prone: true
     consent_given: true
     medical_clearance: true
@@ -141,9 +147,9 @@
   - external_id: "demo-fc-ps-3"
     organization_slug: "demo-fc"
     team_name: "Prima Squadra"
-    first_name: "Giorgio"
-    last_name: "Chiellini"
-    date_of_birth: "1984-08-14"
+    first_name: "Gabriele"
+    last_name: "Costa"
+    date_of_birth: "2008-11-18"
     nationality: "IT"
     role_primary: "DF"
     dominant_foot: "LEFT"
@@ -152,7 +158,10 @@
     height_cm: 187
     weight_kg: 83
     is_active: true
-    is_minor: false
+    is_minor: true
+    guardian_name: "Silvia Costa"
+    guardian_email: "s.costa@example.com"
+    guardian_phone: "+39 333 3030303"
     injury_prone: false
     consent_given: true
     medical_clearance: true
@@ -168,9 +177,9 @@
   - external_id: "demo-fc-ps-23"
     organization_slug: "demo-fc"
     team_name: "Prima Squadra"
-    first_name: "Nicolò"
-    last_name: "Barella"
-    date_of_birth: "1997-02-07"
+    first_name: "Andrea"
+    last_name: "Puglisi"
+    date_of_birth: "2009-05-06"
     nationality: "IT"
     role_primary: "MF"
     role_secondary: "DF"
@@ -180,7 +189,10 @@
     height_cm: 175
     weight_kg: 68
     is_active: true
-    is_minor: false
+    is_minor: true
+    guardian_name: "Giulia Puglisi"
+    guardian_email: "g.puglisi@example.com"
+    guardian_phone: "+39 333 4040404"
     injury_prone: false
     consent_given: true
     medical_clearance: true
@@ -196,9 +208,9 @@
   - external_id: "demo-fc-ps-6"
     organization_slug: "demo-fc"
     team_name: "Prima Squadra"
-    first_name: "Marco"
-    last_name: "Verratti"
-    date_of_birth: "1992-11-05"
+    first_name: "Riccardo"
+    last_name: "Bellini"
+    date_of_birth: "2008-09-24"
     nationality: "IT"
     role_primary: "MF"
     dominant_foot: "RIGHT"
@@ -207,7 +219,10 @@
     height_cm: 165
     weight_kg: 60
     is_active: true
-    is_minor: false
+    is_minor: true
+    guardian_name: "Federica Bellini"
+    guardian_email: "f.bellini@example.com"
+    guardian_phone: "+39 333 5050505"
     injury_prone: true
     consent_given: true
     medical_clearance: true
@@ -223,9 +238,9 @@
   - external_id: "demo-fc-ps-10"
     organization_slug: "demo-fc"
     team_name: "Prima Squadra"
-    first_name: "Lorenzo"
-    last_name: "Insigne"
-    date_of_birth: "1991-06-04"
+    first_name: "Filippo"
+    last_name: "Galli"
+    date_of_birth: "2009-01-30"
     nationality: "IT"
     role_primary: "FW"
     role_secondary: "MF"
@@ -235,7 +250,10 @@
     height_cm: 163
     weight_kg: 59
     is_active: true
-    is_minor: false
+    is_minor: true
+    guardian_name: "Lorenzo Galli"
+    guardian_email: "l.galli@example.com"
+    guardian_phone: "+39 333 6060606"
     injury_prone: false
     consent_given: true
     medical_clearance: true
@@ -251,9 +269,9 @@
   - external_id: "demo-fc-ps-9"
     organization_slug: "demo-fc"
     team_name: "Prima Squadra"
-    first_name: "Ciro"
-    last_name: "Immobile"
-    date_of_birth: "1990-02-20"
+    first_name: "Emanuele"
+    last_name: "Vitale"
+    date_of_birth: "2008-12-12"
     nationality: "IT"
     role_primary: "FW"
     dominant_foot: "RIGHT"
@@ -262,7 +280,10 @@
     height_cm: 185
     weight_kg: 78
     is_active: true
-    is_minor: false
+    is_minor: true
+    guardian_name: "Simona Vitale"
+    guardian_email: "s.vitale@example.com"
+    guardian_phone: "+39 333 7070707"
     injury_prone: false
     consent_given: true
     medical_clearance: true
@@ -278,9 +299,9 @@
   - external_id: "demo-fc-ps-7"
     organization_slug: "demo-fc"
     team_name: "Prima Squadra"
-    first_name: "Federico"
-    last_name: "Chiesa"
-    date_of_birth: "1997-10-25"
+    first_name: "Tommaso"
+    last_name: "Greco"
+    date_of_birth: "2009-08-08"
     nationality: "IT"
     role_primary: "FW"
     role_secondary: "MF"
@@ -290,7 +311,10 @@
     height_cm: 175
     weight_kg: 70
     is_active: true
-    is_minor: false
+    is_minor: true
+    guardian_name: "Francesca Greco"
+    guardian_email: "f.greco@example.com"
+    guardian_phone: "+39 333 8080808"
     injury_prone: true
     consent_given: true
     medical_clearance: true

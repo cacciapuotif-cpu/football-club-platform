@@ -1,0 +1,86 @@
+version: 1.0.0
+domain: wellness
+description: >
+  Contract for ingestion and storage of player wellness records (subjective surveys, psychometrics).
+owner: product-team
+sla:
+  ingestion_latency: PT4H
+  update_cadence: daily
+  completeness_threshold: 0.95
+schema:
+  table: wellness_entries
+  primary_key:
+    - wellness_entry_id
+  fields:
+    - name: wellness_entry_id
+      type: uuid
+      required: true
+    - name: player_id
+      type: uuid
+      required: true
+    - name: organization_id
+      type: uuid
+      required: true
+    - name: survey_date
+      type: date
+      required: true
+    - name: subjective_wellness_score
+      type: integer
+      range: [1, 10]
+      required: true
+    - name: sleep_hours
+      type: numeric(4,1)
+      required: false
+    - name: soreness
+      type: integer
+      range: [1, 10]
+      required: false
+    - name: stress
+      type: integer
+      range: [1, 10]
+      required: false
+    - name: mood
+      type: integer
+      range: [1, 10]
+      required: false
+    - name: psychometric_scale
+      type: varchar(50)
+      required: false
+    - name: psychometric_score
+      type: numeric(5,2)
+      required: false
+    - name: consent_status
+      type: varchar(20)
+      enum: [granted, revoked, pending]
+      required: true
+    - name: tokenized_identifier
+      type: varchar(255)
+      required: true
+    - name: retention_flag
+      type: varchar(20)
+      enum: [active, review, purge]
+      required: true
+    - name: created_at
+      type: timestamptz
+      default: now()
+    - name: updated_at
+      type: timestamptz
+      default: now()
+quality_rules:
+  - check: NOT NULL constraints for required fields
+  - check: values within defined ranges
+  - check: consent_status != 'granted' → fields with personal data are masked/pseudonymized
+lineage:
+  source_systems:
+    - mobile_wellness_app
+    - survey_portal
+  downstream:
+    - readiness_feature_store
+    - alerts_engine
+gdpr:
+  legal_basis:
+    - art_6_1_a (consent)
+    - art_9_2_a (explicit consent)
+  retention_policy: see ../privacy/retention-policy.md
+  pseudonymization: tokenized_identifier stored separately with key vault
+

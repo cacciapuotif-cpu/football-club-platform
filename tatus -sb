@@ -1,0 +1,118 @@
+[1mdiff --git a/backend/app/security.py b/backend/app/security.py[m
+[1mindex 8fb4edf..22b9332 100644[m
+[1m--- a/backend/app/security.py[m
+[1m+++ b/backend/app/security.py[m
+[36m@@ -1,10 +1,16 @@[m
+ """Authentication and security utilities."""[m
+ [m
+[32m+[m[32mfrom __future__ import annotations[m
+[32m+[m
+[32m+[m[32mimport json[m
+[32m+[m[32mimport time[m
+ from datetime import datetime, timedelta[m
+[31m-from typing import Any[m
+[32m+[m[32mfrom typing import Any, Dict[m
+ [m
+[32m+[m[32mimport httpx[m
+ from fastapi import HTTPException, status[m
+ from jose import JWTError, jwt[m
+[32m+[m[32mfrom jose.algorithms import RSAAlgorithm[m
+ from passlib.context import CryptContext[m
+ [m
+ from app.config import settings[m
+[36m@@ -46,13 +52,92 @@[m [mdef create_refresh_token(data: dict[str, Any]) -> str:[m
+ [m
+ [m
+ def decode_token(token: str) -> dict[str, Any]:[m
+[31m-    """Decode and verify a JWT token."""[m
+[32m+[m[32m    """Decode and verify a JWT token either via OIDC JWKS or shared secret."""[m
+[32m+[m[32m    if settings.OIDC_JWKS_URL:[m
+[32m+[m[32m        return _decode_oidc_token(token)[m
+[32m+[m
+     try:[m
+         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])[m
+         return payload[m
+[31m-    except JWTError as e:[m
+[32m+[m[32m    except JWTError as exc:[m
+[32m+[m[32m        raise HTTPException([m
+[32m+[m[32m            status_code=status.HTTP_401_UNAUTHORIZED,[m
+[32m+[m[32m            detail="Could not validate credentials",[m
+[32m+[m[32m            headers={"WWW-Authenticate": "Bearer"},[m
+[32m+[m[32m        ) from exc[m
+[32m+[m
+[32m+[m
+[32m+[m[32mclass _JWKSCache:[m
+[32m+[m[32m    """Simple in-memory JWKS cache with TTL."""[m
+[32m+[m
+[32m+[m[32m    def __init__(self) -> None:[m
+[32m+[m[32m        self._jwks: Dict[str, Any] = {}[m
+[32m+[m[32m        self._expires_at: float = 0.0[m
+[32m+[m
+[32m+[m[32m    def _refresh(self) -> None:[m
+[32m+[m[32m        if not settings.OIDC_JWKS_URL:[m
+[32m+[m[32m            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="JWKS URL not configured")[m
+[32m+[m
+[32m+[m[32m        response = httpx.get(settings.OIDC_JWKS_URL, timeout=settings.OIDC_HTTP_TIMEOUT)[m
+[32m+[m[32m        response.raise_for_status()[m
+[32m+[m[32m        self._jwks = response.json()[m
+[32m+[m[32m        self._expires_at = time.time() + settings.OIDC_JWKS_CACHE_SECONDS[m
+[32m+[m
+[32m+[m[32m    def get_key(self, kid: str) -> Dict[str, Any]:[m
+[32m+[m[32m        now = time.time()[m
+[32m+[m[32m        if now >= self._expires_at or not self._jwks:[m
+[32m+[m[32m            self._refresh()[m
+[32m+[m[32m        for key in self._jwks.get("keys", []):[m
+[32m+[m[32m            if key.get("kid") == kid:[m
+[32m+[m[32m                return key[m
+[32m+[m[32m        # refresh once more in case key rotated recently[m
+[32m+[m[32m        self._refresh()[m
+[32m+[m[32m        for key in self._jwks.get("keys", []):[m
+[32m+[m[32m            if key.get("kid") == kid:[m
+[32m+[m[32m                return key[m
+[32m+[m[32m        raise JWTError(f"Signing key not found for kid={kid}")[m
+[32m+[m
+[32m+[m
+[32m+[m[32m_jwks_cache = _JWKSCache()[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef _decode_oidc_token(token: str) -> dict[str, Any]:[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        unverified = jwt.get_unverified_header(token)[m
+[32m+[m[32m    except JWTError as exc:[m
+[32m+[m[32m        raise HTTPException([m
+[32m+[m[32m            status_code=status.HTTP_401_UNAUTHORIZED,[m
+[32m+[m[32m            detail="Invalid token header",[m
+[32m+[m[32m            headers={"WWW-Authenticate": "Bearer"},[m
+[32m+[m[32m        ) from exc[m
+[32m+[m
+[32m+[m[32m    kid = unverified.get("kid")[m
+[32m+[m[32m    if not kid:[m
+[32m+[m[32m        raise HTTPException([m
+[32m+[m[32m            status_code=status.HTTP_401_UNAUTHORIZED,[m
+[32m+[m[32m            detail="Missing kid in token header",[m
+[32m+[m[32m            headers={"WWW-Authenticate": "Bearer"},[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m    jwk = _jwks_cache.get_key(kid)[m
+[32m+[m[32m    public_key = RSAAlgorithm.from_jwk(json.dumps(jwk))[m
+[32m+[m[32m    algorithms = [unverified.get("alg") or jwk.get("alg") or "RS256"][m
+[32m+[m
+[32m+[m[32m    decode_kwargs: Dict[str, Any] = {[m
+[32m+[m[32m        "algorithms": algorithms,[m
+[32m+[m[32m    }[m
+[32m+[m[32m    if settings.OIDC_AUDIENCE:[m
+[32m+[m[32m        decode_kwargs["audience"] = settings.OIDC_AUDIENCE[m
+[32m+[m[32m    else:[m
+[32m+[m[32m        decode_kwargs["options"] = {"verify_aud": False}[m
+[32m+[m[32m    if settings.OIDC_ISSUER:[m
+[32m+[m[32m        decode_kwargs["issuer"] = settings.OIDC_ISSUER[m
+[32m+[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        return jwt.decode(token, public_key, **decode_kwargs)[m
+[32m+[m[32m    except JWTError as exc:[m
+         raise HTTPException([m
+             status_code=status.HTTP_401_UNAUTHORIZED,[m
+             detail="Could not validate credentials",[m
+             headers={"WWW-Authenticate": "Bearer"},[m
+[31m-        ) from e[m
+[32m+[m[32m        ) from exc[m

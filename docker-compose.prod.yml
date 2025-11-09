@@ -189,6 +189,8 @@ services:
       dockerfile: Dockerfile
     image: football-club-platform-backend:latest
     container_name: football_club_platform_backend
+    env_file:
+      - .env
     environment:
       APP_ENV: production
       DEBUG: "false"
@@ -205,7 +207,6 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       SENTRY_DSN: ${SENTRY_DSN:-}
       JWT_SECRET: ${JWT_SECRET}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
     ports:
       - "8000:8000"
     volumes:

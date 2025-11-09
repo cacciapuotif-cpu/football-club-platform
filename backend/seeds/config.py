@@ -113,6 +113,7 @@ SEED_STEPS = [
     "05_players",
     "06_training_sessions",  # TEAM 3: Training sessions for DEMO_10x10
     "07_player_sessions",  # TEAM 3: Player-session links
+    "08_ml_predictions",
     "99_relations",  # N-N relationships and late FK bindings
 ]
 

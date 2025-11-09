@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from app.config import settings
+from backend.app.config import settings
 from app.models.player import Player, PlayerRole
 from app.models.player_stats import PlayerStats
 from app.models.match import Match

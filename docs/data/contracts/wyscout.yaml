@@ -1,0 +1,37 @@
+version: 1.0.0
+vendor: wyscout
+description: Match analytics and tagging feed
+owner: partnerships
+authentication:
+  type: api_key
+  header: X-API-Key
+endpoints:
+  - name: matches
+    path: /v3/matches
+    method: GET
+    cadence: daily
+    parameters:
+      - name: teamId
+        type: integer
+        required: true
+      - name: competitionId
+        type: integer
+        required: false
+      - name: season
+        type: string
+        required: false
+  - name: events
+    path: /v3/matches/{matchId}/events
+    method: GET
+    cadence: post-match
+quotas:
+  rate_limit_per_minute: 120
+  rate_limit_per_day: 5000
+mapping:
+  events -> docs/data/contracts/videos.yaml
+slo:
+  availability: 99.5%
+  data_latency: PT12H
+notes:
+  - Provide matchId mapping to internal session_id for downstream ingestion.
+

@@ -1,0 +1,63 @@
+version: 1.0.0
+domain: video
+description: Video tagging and analytics contract (matches, training clips).
+owner: integrations-team
+sla:
+  ingestion_latency: PT6H
+  update_cadence: per_event
+  completeness_threshold: 0.9
+schema:
+  table: video_events
+  primary_key:
+    - video_event_id
+  fields:
+    - name: video_event_id
+      type: uuid
+      required: true
+    - name: organization_id
+      type: uuid
+      required: true
+    - name: source_video_id
+      type: uuid
+      required: true
+    - name: player_id
+      type: uuid
+      required: false
+    - name: event_timestamp
+      type: timestamptz
+      required: true
+    - name: tag_type
+      type: varchar(40)
+      enum: [GOAL, PASS, SHOT, INJURY_EVENT, SPRINT, CUSTOM]
+      required: true
+    - name: metadata_json
+      type: jsonb
+      required: false
+    - name: created_at
+      type: timestamptz
+      default: now()
+quality_rules:
+  - check: tag_type in allowed list
+  - check: metadata_json conforms to vendor contract when provided
+lineage:
+  source_systems:
+    - hudl
+    - wyscout
+    - in-house-tagging
+  downstream:
+    - video_analytics_pipeline
+    - readiness_feature_store
+integrations:
+  - vendor: hudl
+    endpoint: /video/tags
+    cadence: event-driven
+    authentication: oauth2
+  - vendor: wyscout
+    endpoint: /matches/events
+    cadence: post-match
+    authentication: api-key
+gdpr:
+  legal_basis:
+    - art_6_1_f
+  pseudonymization: reference player_id tokenized per privacy strategy
+
